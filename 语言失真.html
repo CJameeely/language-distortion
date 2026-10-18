@@ -1545,7 +1545,7 @@ for(const [k,p] of Object.entries(PLANTS)){p.key=k;p.paused=false;}
    连不上它（比如用 Live Server 打开）时，退回 Web Serial：每块板第一次要点 Connect 选一次串口。 */
 const bridge={ws:null,open:false,everOpen:false,boards:[],lastSent:{}};
 /* 公开测试版：不是从本机（127.0.0.1 / localhost）打开时，只做识别、不连接任何硬件，
-   植物按钮显示 Preview，按 D 的读数面板默认打开，显示三株植物"此刻会做出的反应"。 */
+   植物按钮显示 Preview；按 D 可打开读数面板，看三株植物"此刻会做出的反应"。 */
 const DEMO_MODE=!/^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
 function connectBridge(){
   let ws;
@@ -1669,7 +1669,7 @@ function startWebSerial(){
 }
 window.addEventListener('load',()=>{
   plantsUI();
-  if(DEMO_MODE){dbgEl.hidden=false;return;}   /* 测试版：不连硬件，读数面板默认打开 */
+  if(DEMO_MODE)return;   /* 测试版：不连硬件（读数面板默认隐藏，按 D 打开） */
   connectBridge();
 });
 setInterval(plantsUI,500);
