@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Language Distortion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,300;1,400;1,500&display=swap" rel="stylesheet">
+<style>
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+
+:root{
+  --bg:#f3f0e9;
+  --surface:#eae4d7;
+  --border:#ddd5c3;
+  --border-hi:#c7bca4;
+  --text:#4b4638;
+  --dim:#7d7561;
+  --muted:#b0a68d;
+  --accent:#8a9874;
+  --accent-lo:#b9c2a4;
+  --accent-glow:rgba(138,152,116,.22);
+  --mono:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace;
+  --sans:'Cormorant Garamond','Baskerville','Georgia','Times New Roman',serif;
+  /* emotions */
+  --e-angry:#b47c62;
+  --e-happy:#8a9a5e;
+  --e-neutral:#7a9a80;
+  --e-sad:#7c93a8;
+  --e-fearful:#9484a0;
+  --e-surprised:#bd9c5e;
+  /* body states */
+  --b-open:#7f9a68;
+  --b-expansive:#a3ac66;
+  --b-heavy:#8d7f96;
+  --b-active:#bd9256;
+  --b-contracted:#6f8fa3;
+  --b-guarded:#5f8a86;
+  --b-unbalanced:#b9835f;
+  --b-neutral:#a39c88;
+}
+
+/* ══ 布局：整页摄像头 + 磨砂玻璃浮层 ══ */
+:root{
+  --glass:rgba(246,243,236,.56);
+  --glass-line:rgba(255,255,255,.62);
+  --glass-blur:blur(20px) saturate(1.25);
+  --track:rgba(110,100,78,.18);
+}
+html,body{width:100%;height:100vh;background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden;}
+.hid{display:none;}
+
+/* 摄像头铺满整页 */
+#shared-canvas{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;display:block;z-index:0;}
+
+/* 通用磨砂玻璃 */
+.glass{background:var(--glass);border:1px solid var(--glass-line);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);}
+
+/* 顶部 */
+.top{position:fixed;left:24px;right:24px;top:20px;z-index:5;display:flex;align-items:center;justify-content:flex-end;pointer-events:none;}
+.top>*{pointer-events:auto;}
+.ctrl{display:flex;gap:10px;}
+.btn{
+  padding:8px 18px;border-radius:999px;cursor:pointer;
+  font:inherit;font-family:var(--sans);font-style:italic;font-weight:500;font-size:16px;letter-spacing:.04em;color:var(--text);
+  background:var(--glass);border:1px solid var(--glass-line);
+  backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
+  transition:color .25s,background .25s;
+}
+.btn:hover{color:var(--accent);background:rgba(255,255,255,.75);}
+.btn:disabled{opacity:.45;cursor:default;}
+
+/* 启动前的遮罩 */
+.overlay{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;
+  background:var(--bg);transition:opacity .8s;}
+.overlay.gone{opacity:0;pointer-events:none;}
+.overlay .btn{padding:12px 40px;font-size:19px;background:#fff;}
+
+/* 底部三个板块 */
+.panels{position:fixed;left:24px;right:24px;bottom:24px;z-index:5;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+.panel{padding:16px 24px 20px;border-radius:24px;min-width:0;}
+.p-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.p-title{font-family:var(--sans);font-style:italic;font-weight:500;font-size:22px;letter-spacing:.02em;color:var(--text);}
+.sigs{display:flex;align-items:center;gap:7px;}
+.plant-btn{margin-right:8px;padding:2px 12px;border-radius:999px;cursor:pointer;
+  font-family:var(--sans);font-style:italic;font-weight:500;font-size:14px;letter-spacing:.02em;color:var(--text);
+  background:rgba(255,255,255,.38);border:1px solid var(--glass-line);transition:color .25s,background .25s;}
+.plant-btn:hover{background:rgba(255,255,255,.75);}
+.plant-btn.on{color:var(--accent);background:transparent;border-color:transparent;cursor:default;}
+.plant-btn.busy{opacity:.6;}
+.dot{width:6px;height:6px;border-radius:50%;background:rgba(110,100,78,.3);transition:background .5s,box-shadow .5s;}
+.dot.on{background:var(--accent);box-shadow:0 0 8px var(--accent);}
+.p-body{display:grid;grid-template-columns:40% 1fr;gap:22px;align-items:center;}
+
+/* 状态大字 */
+.emotion{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;}
+.emo-cn{display:none;}
+.emo-en{
+  text-align:center;font-family:var(--sans);font-style:italic;font-weight:300;
+  font-size:clamp(22px,2.3vw,36px);line-height:1.1;letter-spacing:0;text-transform:lowercase;white-space:nowrap;
+  color:var(--dim);filter:brightness(.78) saturate(1.2);transition:color .9s,opacity .3s;
+}
+.emo-en::first-letter{text-transform:uppercase;}
+.emo-en.fade{opacity:.08;}
+
+/* 指标条 */
+.metrics{display:flex;flex-direction:column;gap:10px;}
+.metric{display:grid;grid-template-columns:84px 1fr 30px;align-items:center;gap:12px;}
+.m-label{font-family:var(--sans);font-style:italic;font-weight:500;font-size:15px;letter-spacing:.02em;color:var(--text);white-space:nowrap;}
+.m-track{height:4px;border-radius:4px;background:var(--track);overflow:hidden;}
+.m-fill{height:100%;width:0%;border-radius:4px;background:var(--accent);transition:width .3s ease;}
+.m-val{font-family:var(--sans);font-weight:500;font-size:15px;color:var(--dim);text-align:right;font-variant-numeric:lining-nums tabular-nums;}
+.metric[title]{cursor:help;}
+
+/* 语音：波形 + 模型加载 */
+.side{min-width:0;}
+.wave-wrap{height:30px;margin-bottom:12px;border-radius:10px;background:var(--track);overflow:hidden;}
+.wave-canvas{display:block;width:100%;height:100%;}
+.ml-loader{display:flex;align-items:center;gap:10px;overflow:hidden;max-height:16px;opacity:1;transition:opacity .5s,max-height .5s;margin-bottom:8px;}
+.ml-loader.hidden{opacity:0;max-height:0;margin:0;pointer-events:none;}
+.ml-track{flex:1;height:3px;border-radius:3px;background:var(--track);overflow:hidden;}
+.ml-fill{height:100%;width:0%;background:var(--accent);transition:width .4s;}
+.ml-pct{font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums;}
+
+/* 调试面板（按 D 显示 / 隐藏）：姿态 → 触手指令、发给每块板的最新指令 */
+.dbg-plants{position:fixed;left:24px;top:20px;z-index:6;margin:0;padding:12px 16px;border-radius:14px;
+  font:12px/1.55 var(--mono);color:var(--text);white-space:pre;pointer-events:none;}
+.dbg-plants[hidden]{display:none;}
+
+@media (max-width:900px){
+  .panels{grid-template-columns:1fr;gap:10px;max-height:60vh;overflow:auto;}
+}
+</style>
+</head>
+<body>
+
+<video id="video" playsinline muted style="display:none"></video>
+<canvas id="shared-canvas"></canvas>
+
+<header class="top">
+  <div class="ctrl">
+    <button class="btn" id="btn-mic" onclick="startMic()">Microphone</button>
+  </div>
+</header>
+
+<div class="overlay" id="cam-overlay">
+  <button class="btn" id="btn-start" onclick="startAll()">Start camera</button>
+</div>
+
+<pre class="dbg-plants glass" id="dbg-plants" hidden></pre>
+
+<main class="panels">
+
+  <!-- 身体 -->
+  <section class="panel glass">
+    <div class="p-hd"><span class="p-title">Body</span><span class="sigs"><button class="plant-btn" id="btn-plant-body" onclick="connectPlant('body')" title="Arduino (USB)">Connect</button><i class="dot" id="dot-pose"></i></span></div>
+    <div class="p-body">
+      <div class="emotion">
+        <div class="emo-en" id="body-en">—</div>
+        <div class="emo-cn" id="body-cn">—</div>
+      </div>
+      <div class="side metrics">
+        <div class="metric" title="Shoulder / elbow / wrist spread relative to the chest, plus body bounding-box area, against your personal baseline. Higher = arms open and expansive; lower = arms drawn in, guarded.">
+          <span class="m-label">Openness</span><div class="m-track"><div class="m-fill" id="b-openness"></div></div><span class="m-val" id="v-openness">—</span>
+        </div>
+        <div class="metric" title="How far head and shoulders sink relative to the hips, against your baseline. Higher = heavier, drooping; lower = lighter.">
+          <span class="m-label">Weight</span><div class="m-track"><div class="m-fill" id="b-weight"></div></div><span class="m-val" id="v-weight">—</span>
+        </div>
+        <div class="metric" title="Shoulder height difference over shoulder width, against your baseline. Higher = leaning to one side.">
+          <span class="m-label">Tilt</span><div class="m-track"><div class="m-fill" id="b-asym"></div></div><span class="m-val" id="v-asym">—</span>
+        </div>
+        <div class="metric" title="Whole-body speed minus jerk, against your baseline. Higher = smooth and lively; lower = stiff.">
+          <span class="m-label">Flow</span><div class="m-track"><div class="m-fill" id="b-flow"></div></div><span class="m-val" id="v-flow">—</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 面部 -->
+  <section class="panel glass">
+    <div class="p-hd"><span class="p-title">Face</span><span class="sigs"><button class="plant-btn" id="btn-plant-face" onclick="connectPlant('face')" title="Arduino (USB)">Connect</button><i class="dot" id="dot-face"></i></span></div>
+    <div class="p-body">
+      <div class="emotion">
+        <div class="emo-en" id="face-en">—</div>
+        <div class="emo-cn" id="face-cn">—</div>
+      </div>
+      <div class="side metrics">
+        <div class="metric"><span class="m-label">Calm</span><div class="m-track"><div class="m-fill" id="b-f-neutral"></div></div><span class="m-val" id="v-f-neutral">—</span></div>
+        <div class="metric"><span class="m-label">Happy</span><div class="m-track"><div class="m-fill" id="b-f-happy"></div></div><span class="m-val" id="v-f-happy">—</span></div>
+        <div class="metric"><span class="m-label">Sad</span><div class="m-track"><div class="m-fill" id="b-f-sad"></div></div><span class="m-val" id="v-f-sad">—</span></div>
+        <div class="metric"><span class="m-label">Angry</span><div class="m-track"><div class="m-fill" id="b-f-angry"></div></div><span class="m-val" id="v-f-angry">—</span></div>
+        <div class="metric"><span class="m-label">Surprised</span><div class="m-track"><div class="m-fill" id="b-f-surprised"></div></div><span class="m-val" id="v-f-surprised">—</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 语音 -->
+  <section class="panel glass">
+    <div class="p-hd"><span class="p-title">Voice</span><span class="sigs"><button class="plant-btn" id="btn-plant-voice" onclick="connectPlant('voice')" title="Arduino (USB)">Connect</button><i class="dot" id="dot-audio"></i><i class="dot" id="dot-ml"></i></span></div>
+    <div class="p-body">
+      <div class="emotion">
+        <div class="emo-en" id="voice-en">—</div>
+        <div class="emo-cn" id="voice-cn">—</div>
+      </div>
+      <div class="side">
+        <div class="ml-loader hidden" id="ml-loader">
+          <div class="ml-track"><div class="ml-fill" id="ml-fill"></div></div><span class="ml-pct" id="ml-pct">0%</span>
+        </div>
+        <div class="wave-wrap"><canvas class="wave-canvas" id="wave-canvas"></canvas></div>
+        <div class="metrics">
+          <div class="metric" title="Estimated from loudness, pitch and zero-crossing rate, fused with the voice-emotion classifier. Higher = more positive; lower = more negative. (SAM 1–9, 5 = neutral)">
+            <span class="m-label">Valence</span><div class="m-track"><div class="m-fill" id="b-intensity"></div></div><span class="m-val" id="v-intensity">—</span>
+          </div>
+          <div class="metric" title="Mainly from loudness and speech rhythm. Higher = more excited; lower = calmer. (SAM 1–9, 5 = neutral)">
+            <span class="m-label">Arousal</span><div class="m-track"><div class="m-fill" id="b-pitch"></div></div><span class="m-val" id="v-pitch">—</span>
+          </div>
+          <div class="metric" title="From loudness, rhythm steadiness and how centred the pitch is. Higher = more commanding; lower = more hesitant. (SAM 1–9, 5 = neutral)">
+            <span class="m-label">Dominance</span><div class="m-track"><div class="m-fill" id="b-rhythm"></div></div><span class="m-val" id="v-rhythm">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- 脚本仍在读写、但不再展示的节点 -->
+<div class="hid">
+  <span id="dr-body-emo"></span><span id="dr-body-cn"></span>
+  <span id="dr-face-emo"></span><span id="dr-face-cn"></span>
+  <span id="dr-voice-emo"></span><span id="dr-voice-cn"></span>
+  <span id="body-why"></span><span id="ts"></span><span id="dr-fill"></span><span id="dr-score"></span>
+  <span id="dbg-vface"></span><span id="dbg-aface"></span><span id="dbg-vvoice"></span><span id="dbg-avoice"></span><span id="dbg-o"></span><span id="dbg-w"></span><span id="dbg-a"></span><span id="dbg-f"></span><span id="dbg-asymsigned"></span><span id="dbg-bendmag"></span><span id="dbg-bendangle"></span><span id="dbg-div"></span><span id="dbg-desync"></span>
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/face-api.js/dist/face-api.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/pitchfinder/dist/pitchfinder.js" crossorigin="anonymous"></script>
+
+<script>
+'use strict';
+
+/* ══════════════════════════════════════════
+   UTILITIES
+══════════════════════════════════════════ */
+const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+function mapRange(v,inMin,inMax,outMin,outMax){
+  return outMin+(clamp(v,inMin,inMax)-inMin)*(outMax-outMin)/(inMax-inMin);
+}
+function setBar(id,v){document.getElementById('b-'+id).style.width=clamp(v,0,1)*100+'%';}
+function setVal(id,t){document.getElementById('v-'+id).textContent=t;}
+function pct(v){return Math.round(v*100).toString();}
+
+/* Continuous emotion/actuator mapping (all public helpers are exposed at EOF). */
+function voiceToValenceArousal(probs={}){
+  const angry=clamp(Number(probs.angry)||0,0,1),happy=clamp(Number(probs.happy)||0,0,1);
+  const neutral=clamp(Number(probs.neutral)||0,0,1),sad=clamp(Number(probs.sad)||0,0,1);
+  const total=angry+happy+neutral+sad||1;
+  const p={angry:angry/total,happy:happy/total,neutral:neutral/total,sad:sad/total};
+  return {valence:clamp(p.happy-.5*(p.sad+p.angry),-1,1),arousal:clamp(p.angry+p.happy*.7+p.sad*.3+p.neutral*.1,0,1)};
+}
+function crossChannelDivergence(vFace,vVoice,vPostureProxy){
+  const values=[clamp(vFace,-1,1),clamp(vVoice,-1,1),clamp(vPostureProxy,-1,1)];
+  const mean=values.reduce((a,b)=>a+b,0)/3;
+  return clamp(values.reduce((sum,v)=>sum+(v-mean)**2,0)/3/.5,0,1);
+}
+function inflatableFlowerState(vVoice,aVoice,vFace){
+  vVoice=clamp(vVoice,-1,1);aVoice=clamp(aVoice,0,1);
+  return {amplitude:clamp(vVoice>=0?.4+vVoice*.6:.4+vVoice*.15,.25,1),cycleMs:Math.round(3000-aVoice*2200),desync:clamp(Math.abs(vFace-vVoice),0,1)};
+}
+function inflatableServoAngles(state,timeMs=performance.now()){
+  const phase=timeMs/state.cycleMs*Math.PI*2,spread=state.desync*Math.PI*.7;
+  return [0,1,2,3].map(i=>clamp(Math.round(90+Math.sin(phase+(i-1.5)*spread)*70*state.amplitude),0,180));
+}
+/* Three-cable tentacle robot: posture is expressed as a single bend vector
+   (direction + magnitude), which is then reverse-solved into how far each of
+   the 3 cables (spaced 120° apart) is allowed to let out. */
+function bendVectorFromPosture(O,W,AsymSigned){
+  const droopMag=clamp(W,0,1),droopAngle=270*Math.PI/180; // 270°= straight down, rig-dependent
+  const lateralMag=clamp(Math.abs(AsymSigned)*1.5,0,1);
+  const lateralAngle=(AsymSigned>=0?0:180)*Math.PI/180; // 0°=right,180°=left, rig-dependent
+  const dx=droopMag*Math.cos(droopAngle)+lateralMag*Math.cos(lateralAngle);
+  const dy=droopMag*Math.sin(droopAngle)+lateralMag*Math.sin(lateralAngle);
+  return {bendMagnitude:clamp(Math.hypot(dx,dy),0,1),bendAngle:Math.atan2(dy,dx)*180/Math.PI};
+}
+function tentacleCableLengths(O,W,AsymSigned,Flow){
+  O=clamp(O,0,1);Flow=clamp(Flow,0,1);
+  const {bendMagnitude,bendAngle}=bendVectorFromPosture(O,W,AsymSigned);
+  const curlBase=(1-O)*.5; // low openness → all three cables pulled in, tentacle curls in on itself
+  const cableLengths=[0,120,240].map(angle=>{
+    const dirEffect=Math.cos((angle-bendAngle)*Math.PI/180)*bendMagnitude*.5;
+    return clamp(1-curlBase-dirEffect,0,1); // 1=fully let out, 0=fully pulled in
+  });
+  return {cableLengths,steps:Math.round(3+Flow*27),speed:1-clamp(W,0,1)*.6,bendMagnitude,bendAngle};
+}
+function projectorState(vFace,aFace,vVoice,aVoice,W){
+  const vPostureProxy=1-clamp(W,0,1),meanValence=(vFace+vVoice+vPostureProxy)/3;
+  const divergence=crossChannelDivergence(vFace,vVoice,vPostureProxy);
+  return {hue:15+(1-(clamp(meanValence,-1,1)+1)/2)*200,brightness:.3+clamp((aFace+aVoice)/2,0,1)*.7,divergence,distortionActive:divergence>.35};
+}
+
+function applyEmo(enId,cnId,enText,cnText,col){
+  const en=document.getElementById(enId),cn=document.getElementById(cnId);
+  en.classList.add('fade');
+  setTimeout(()=>{
+    en.textContent=enText; cn.textContent=cnText;
+    en.style.color=col; cn.style.color=col;
+    en.style.textShadow=`0 0 38px ${col}44`;
+    en.classList.remove('fade');
+  },260);
+}
+
+/* ══════════════════════════════════════════
+   DISTORTION ENGINE
+══════════════════════════════════════════ */
+/* valence map: -1 (negative) → +1 (positive) */
+const VALENCE={
+  neutral:0, open:.7, heavy:-.55, active:.3, contracted:-.6, unbalanced:-.25,
+  happy:.88, sad:-.78, angry:-.68, fearful:-.48, disgusted:-.58, surprised:.28,
+};
+
+let drBodyKey='neutral', drFaceKey='neutral', drVoiceKey='neutral';
+let distortionValue=0;
+
+function calcDistortion(bKey,fKey,vKey){
+  const pts=[padFor(bKey),padFor(fKey),padFor(vKey)];
+  const mean={
+    valence:pts.reduce((a,p)=>a+p.valence,0)/3,
+    arousal:pts.reduce((a,p)=>a+p.arousal,0)/3,
+    dominance:pts.reduce((a,p)=>a+p.dominance,0)/3,
+  };
+  const variance=pts.reduce((acc,p)=>acc+
+    (p.valence-mean.valence)**2+
+    (p.arousal-mean.arousal)**2+
+    (p.dominance-mean.dominance)**2,0)/3;
+  return Math.min(99,Math.round(Math.sqrt(variance/3)*120));
+}
+
+function updateDistortionRow(){
+  const d=calcDistortion(drBodyKey,drFaceKey,drVoiceKey);
+  distortionValue=d;
+
+  /* color gradient for distortion meter: neutral→accent at low, accent→angry at high */
+  const hue = d<50
+    ? `color-mix(in srgb, var(--e-neutral) ${100-d*2}%, var(--accent) ${d*2}%)`
+    : `color-mix(in srgb, var(--accent) ${100-(d-50)*2}%, var(--e-angry) ${(d-50)*2}%)`;
+
+  document.getElementById('dr-fill').style.width=d+'%';
+  document.getElementById('dr-fill').style.background=
+    d<30?'var(--e-neutral)':d<65?'var(--accent)':'var(--e-angry)';
+  document.getElementById('dr-score').textContent=d.toString().padStart(2,'0');
+  document.getElementById('dr-score').style.color=
+    d<30?'var(--dim)':d<65?'var(--accent)':'var(--e-angry)';
+  updateEmotionMusic();
+}
+
+function setDrBody(key,enText,cnText,col){
+  drBodyKey=key;
+  document.getElementById('dr-body-emo').textContent=enText;
+  document.getElementById('dr-body-emo').style.color=col;
+  document.getElementById('dr-body-cn').textContent=cnText;
+  updateDistortionRow();
+}
+function setDrFace(key,enText,cnText,col){
+  drFaceKey=key;
+  document.getElementById('dr-face-emo').textContent=enText;
+  document.getElementById('dr-face-emo').style.color=col;
+  document.getElementById('dr-face-cn').textContent=cnText;
+  updateDistortionRow();
+}
+function setDrVoice(key,enText,cnText,col){
+  drVoiceKey=key;
+  document.getElementById('dr-voice-emo').textContent=enText;
+  document.getElementById('dr-voice-emo').style.color=col;
+  document.getElementById('dr-voice-cn').textContent=cnText;
+  updateDistortionRow();
+}
+
+/* ══════════════════════════════════════════
+   EMOTION MUSIC — generated from body / face / voice
+══════════════════════════════════════════ */
+/* PAD / VAD coordinates follow the Russell circumplex and Mehrabian-Russell PAD convention:
+   each dimension is represented on [-1, 1], then displayed as the SAM-style 1-9 scale. */
+const PAD_COORDS={
+  neutral:{valence:0,arousal:0,dominance:0},
+  open:{valence:.62,arousal:.18,dominance:.45},
+  expansive:{valence:.55,arousal:.55,dominance:.5},
+  active:{valence:.18,arousal:.78,dominance:.35},
+  heavy:{valence:-.48,arousal:-.48,dominance:-.35},
+  contracted:{valence:-.62,arousal:-.42,dominance:-.45},
+  guarded:{valence:-.35,arousal:.15,dominance:-.3},
+  unbalanced:{valence:-.25,arousal:.52,dominance:-.55},
+  happy:{valence:.82,arousal:.58,dominance:.42},
+  surprised:{valence:.18,arousal:.82,dominance:-.08},
+  fearful:{valence:-.72,arousal:.78,dominance:-.68},
+  angry:{valence:-.70,arousal:.72,dominance:.55},
+  sad:{valence:-.78,arousal:-.55,dominance:-.42},
+  disgusted:{valence:-.78,arousal:.25,dominance:.18},
+};
+const MAJOR_SCALE=[0,2,4,7,9,12];
+const MINOR_SCALE=[0,3,5,7,10,12];
+let musicState={
+  started:false,step:0,timer:null,master:null,padGain:null,padFilter:null,padOsc:[],
+  valence:0,arousal:.2,tension:0,root:55,scale:MAJOR_SCALE,intervalMs:900,
+};
+
+function midiToHz(m){return 440*Math.pow(2,(m-69)/12);}
+function padFor(key){return PAD_COORDS[key]||PAD_COORDS.neutral;}
+
+function calcMusicMood(){
+  const b=padFor(drBodyKey),f=padFor(drFaceKey),v=padFor(drVoiceKey);
+  const valence=(b.valence+f.valence+v.valence)/3;
+  const arousal=clamp(((b.arousal+f.arousal+v.arousal)/3+1)/2+distortionValue/180,0,1);
+  return {valence,arousal,tension:distortionValue/100};
+}
+
+function startEmotionMusic(){
+  if(musicState.started||!audioCtx)return;
+  musicState.master=audioCtx.createGain();
+  musicState.master.gain.value=.045;
+  musicState.master.connect(audioCtx.destination);
+
+  musicState.padGain=audioCtx.createGain();
+  musicState.padGain.gain.value=.018;
+  musicState.padFilter=audioCtx.createBiquadFilter();
+  musicState.padFilter.type='lowpass';
+  musicState.padFilter.frequency.value=850;
+  musicState.padGain.connect(musicState.padFilter);
+  musicState.padFilter.connect(musicState.master);
+
+  for(let i=0;i<3;i++){
+    const osc=audioCtx.createOscillator();
+    osc.type=i===0?'sine':'triangle';
+    osc.frequency.value=midiToHz(48+i*7);
+    osc.detune.value=(i-1)*4;
+    osc.connect(musicState.padGain);
+    osc.start();
+    musicState.padOsc.push(osc);
+  }
+
+  musicState.started=true;
+  updateEmotionMusic();
+  musicState.timer=setInterval(playMusicStep,220);
+}
+
+function updateEmotionMusic(){
+  if(!musicState.started||!audioCtx)return;
+  const mood=calcMusicMood();
+  musicState.valence=lerp(musicState.valence,mood.valence,.18);
+  musicState.arousal=lerp(musicState.arousal,mood.arousal,.18);
+  musicState.tension=lerp(musicState.tension,mood.tension,.18);
+  musicState.root=musicState.valence>=0?57:53;
+  musicState.scale=musicState.valence>=0?MAJOR_SCALE:MINOR_SCALE;
+  musicState.intervalMs=Math.round(mapRange(musicState.arousal,0,1,950,260));
+
+  const now=audioCtx.currentTime;
+  const chord=musicState.valence>=0?[0,4,7]:[0,3,7];
+  musicState.padOsc.forEach((osc,i)=>{
+    const tensionOffset=musicState.tension>.55&&i===2?1:0;
+    osc.frequency.setTargetAtTime(midiToHz(musicState.root+chord[i]+tensionOffset),now,.35);
+  });
+  musicState.padGain.gain.setTargetAtTime(mapRange(musicState.arousal,0,1,.012,.032),now,.4);
+  musicState.padFilter.frequency.setTargetAtTime(mapRange(musicState.tension,0,1,550,1850),now,.4);
+}
+
+function playTone(freq,dur,when,type='sine',gain=.035){
+  if(!musicState.started||!audioCtx)return;
+  const osc=audioCtx.createOscillator();
+  const g=audioCtx.createGain();
+  osc.type=type;
+  osc.frequency.value=freq;
+  g.gain.setValueAtTime(0,when);
+  g.gain.linearRampToValueAtTime(gain,when+.015);
+  g.gain.exponentialRampToValueAtTime(.0001,when+dur);
+  osc.connect(g);
+  g.connect(musicState.master);
+  osc.start(when);
+  osc.stop(when+dur+.04);
+}
+
+function playNoise(when,dur,gain=.02){
+  if(!musicState.started||!audioCtx)return;
+  const len=Math.max(1,Math.floor(audioCtx.sampleRate*dur));
+  const buf=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
+  const data=buf.getChannelData(0);
+  for(let i=0;i<len;i++)data[i]=(Math.random()*2-1)*(1-i/len);
+  const src=audioCtx.createBufferSource();
+  const g=audioCtx.createGain();
+  const f=audioCtx.createBiquadFilter();
+  f.type='highpass';f.frequency.value=1200;
+  g.gain.value=gain;
+  src.buffer=buf;
+  src.connect(f);f.connect(g);g.connect(musicState.master);
+  src.start(when);
+}
+
+function playMusicStep(){
+  if(!musicState.started||!audioCtx)return;
+  updateEmotionMusic();
+  const now=audioCtx.currentTime;
+  const stepDur=musicState.intervalMs/1000;
+  if(musicState.stepTime&&performance.now()<musicState.stepTime)return;
+  musicState.stepTime=performance.now()+musicState.intervalMs;
+
+  const scale=musicState.scale;
+  const idx=(musicState.step*2+(musicState.tension>.45?1:0))%scale.length;
+  const octave=musicState.arousal>.65?12:0;
+  const note=musicState.root+scale[idx]+octave;
+  const type=musicState.tension>.62?'sawtooth':(musicState.valence>=0?'triangle':'sine');
+  playTone(midiToHz(note),clamp(stepDur*.72,.12,.75),now,type,mapRange(musicState.arousal,0,1,.018,.045));
+
+  if(musicState.tension>.5&&musicState.step%3===0){
+    playTone(midiToHz(note+6),.16,now+.045,'sine',.012);
+  }
+  if(musicState.arousal>.72&&musicState.step%2===0){
+    playNoise(now+.02,.045,mapRange(musicState.tension,0,1,.006,.026));
+  }
+  musicState.step++;
+}
+
+/* ══════════════════════════════════════════
+   MODULE 1 — POSE (MediaPipe + LMA)
+══════════════════════════════════════════ */
+const videoEl=document.getElementById('video');
+const sharedCvs=document.getElementById('shared-canvas');
+const sharedCtx=sharedCvs.getContext('2d');
+
+/* 把检测画面（摄像头 + 骨架 + 人脸框，不含文字）同步给用户页 用户引导.html */
+const frameChannel=(()=>{try{return new BroadcastChannel('detect-frame');}catch(_){return null;}})();
+const frameCvs=document.createElement('canvas'),frameCtx=frameCvs.getContext('2d');
+let lastFrameSent=0,frameBusy=false;
+function broadcastFrame(){
+  if(!frameChannel||frameBusy||!sharedCvs.width)return;
+  const now=performance.now();
+  if(now-lastFrameSent<66)return;           /* ≈15fps */
+  lastFrameSent=now;frameBusy=true;
+  const w=960,h=Math.round(w*sharedCvs.height/sharedCvs.width);
+  frameCvs.width=w;frameCvs.height=h;
+  frameCtx.drawImage(sharedCvs,0,0,w,h);
+  frameCvs.toBlob(b=>{if(b)frameChannel.postMessage(b);frameBusy=false;},'image/jpeg',.78);
+}
+
+let poseInst,poseSending=false,prevLM=null,prevVelocity=0;
+const BASELINE_MS=7000,POSE_EMA_ALPHA=.15,MIN_STD=.0001;
+/* how much shoulder-tilt (as a fraction of shoulder width) counts as a "full"
+   ±1 lean — this is a raw instantaneous signal, not baseline-relative like
+   the other LMA metrics, since the tentacle needs a physical lean direction
+   right away rather than after the 7s calibration window */
+const ASYM_SIGNED_NORM=.35;
+let asymSignedDisplayed=0;
+const poseBaselineSamples={CI:[],spread:[],weightRaw:[],asym:[],flow:[],jerk:[]};
+const poseBaseline={ready:false,startedAt:0,CI:null,weightRaw:null,asym:null,flow:null,jerk:null};
+const lmaDisplayed={openness:0,weight:0,asym:0,flow:0};
+const lmaOutput255={O:0,W:0,A:0,F:0};
+let poseMaxBBoxArea=0;
+let curBodyKey=null,pendBodyKey=null,bodyTimer=null;
+let lastFaceResult=null,BODY_CONN=null,faceLmSm=null;
+/* 触手映射（posture-mapping.js，ES module，和 Arduino 触手模块配套调好的参数）。
+   需要从 http:// 打开页面才能加载；加载失败时触手改用本页自己的 LMA（见 tentacleInput）。 */
+let postureMapper=null,lastPoseResultAt=0;
+/* 气囊花映射（voice-mapping.js）：语调 + 情绪模型 → 充盈度 / 呼吸 / 颤动 → "P,target,rate"。
+   加载失败时不发 P 指令，Arduino 2 秒后自己慢慢呼吸。 */
+/* 机械花映射（flower-mapping.js）+ 新协议（plant-protocol.js）+ 调试面板（debug-panel.js，按 C 打开） */
+let flowerMapper=null,flowerSender=null,plantProtocol=null,flowerCfg=null,debugPanel=null;
+let airbagMapper=null,airbagSender=null,airbagMod=null;
+let tentacleMapper=null,tentacleSender=null,tentacleMod=null;
+Promise.all([import('./plant-protocol.js'),import('./flower-mapping.js'),import('./airbag-mapping.js'),import('./tentacle-mapping.js'),import('./debug-panel.js')]).then(([P,F,B,T,D])=>{
+  plantProtocol=P;flowerCfg=F.config;airbagMod=B;tentacleMod=T;
+  flowerMapper=F.createFlowerMapper(F.config,P);
+  flowerSender=P.createSender('F',{L:P.FIELDS.FL});
+  airbagMapper=B.createAirbagMapper(B.config,P);
+  airbagSender=P.createSender('P',{L:P.FIELDS.PL});
+  tentacleMapper=T.createTentacleMapper(T.config,P);
+  tentacleSender=P.createSender('T',{L:P.FIELDS.TL});
+  debugPanel=D.createDebugPanel(document.body);
+  setupFlowerDebug();
+  setupAirbagDebug();
+  setupTentacleDebug();
+}).catch(e=>console.warn('植物映射模块加载失败',e));
+let voiceMapper=null;
+import('./voice-mapping.js').then(m=>{voiceMapper=m;})
+  .catch(e=>console.warn('voice-mapping.js 加载失败，气囊花改由 Arduino 自己呼吸',e));
+import('./posture-mapping.js').then(m=>{postureMapper=m;})
+  .catch(e=>console.warn('posture-mapping.js 加载失败，触手改用内置映射',e));
+
+async function setupPose(){
+  poseInst=new Pose({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}`});
+  poseInst.setOptions({modelComplexity:1,   /* 1 = Full；2 = Heavy 太重，会拖慢整页 */
+    smoothLandmarks:true,enableSegmentation:false,minDetectionConfidence:.65,minTrackingConfidence:.65});
+  poseInst.onResults(onPoseResults);
+  poseRAF();
+  document.getElementById('dot-pose').classList.add('on');
+}
+
+function poseRAF(){
+  requestAnimationFrame(async()=>{
+    if(videoEl.readyState>=2&&!poseSending){
+      poseSending=true;
+      try{await poseInst.send({image:videoEl});}catch(_){}
+      poseSending=false;
+    }
+    poseRAF();
+  });
+}
+
+/* 68 点人脸网格：检测约 8 次/秒，绘制时逐帧缓动，避免点位抖动 */
+function drawFaceMesh(ctx){
+  const tgt=lastFaceResult&&lastFaceResult.landmarks&&lastFaceResult.landmarks.positions;
+  if(!tgt){faceLmSm=null;return;}
+  if(!faceLmSm||faceLmSm.length!==tgt.length)faceLmSm=tgt.map(p=>({x:p.x,y:p.y}));
+  else faceLmSm.forEach((p,i)=>{p.x+=(tgt[i].x-p.x)*.35;p.y+=(tgt[i].y-p.y)*.35;});
+  const P=faceLmSm;
+  const path=(a,b,close)=>{ctx.beginPath();for(let i=a;i<=b;i++)i===a?ctx.moveTo(P[i].x,P[i].y):ctx.lineTo(P[i].x,P[i].y);if(close)ctx.closePath();ctx.stroke();};
+  const dots=(a,b,r,al)=>{ctx.fillStyle=`rgba(255,255,255,${al})`;for(let i=a;i<=b;i++){ctx.beginPath();ctx.arc(P[i].x,P[i].y,r,0,7);ctx.fill();}};
+  ctx.save();
+  ctx.lineJoin=ctx.lineCap='round';
+  ctx.shadowColor='rgba(255,255,255,.55)';ctx.shadowBlur=5;        /* 淡淡的光晕，不抢画面 */
+  /* 下颌：最淡，只作轮廓 */
+  ctx.strokeStyle='rgba(255,255,255,.34)';ctx.lineWidth=1;path(0,16);dots(0,16,1.2,.55);
+  /* 鼻：细线 */
+  ctx.strokeStyle='rgba(255,255,255,.42)';ctx.lineWidth=1;path(27,30);path(31,35);dots(27,35,1.3,.7);
+  /* 眉、眼、唇：表情主要发生的地方，稍亮 */
+  ctx.strokeStyle='rgba(255,255,255,.66)';ctx.lineWidth=1.2;
+  path(17,21);path(22,26);path(36,41,true);path(42,47,true);path(48,59,true);
+  ctx.strokeStyle='rgba(255,255,255,.3)';ctx.lineWidth=1;path(60,67,true);   /* 内唇：更淡，避免和外唇重叠成一团 */
+  dots(17,26,1.6,.9);dots(36,47,1.6,.9);dots(48,59,1.6,.9);
+  ctx.restore();
+}
+
+function onPoseResults(res){
+  const W=res.image.width,H=res.image.height;
+  lastPoseResultAt=performance.now();
+  if(postureMapper){
+    postureMapper.config.aspectRatio=W/H;
+    postureMapper.update(res.poseLandmarks??null,lastPoseResultAt);   /* 没人时传 null：映射器自己保持 1.5 秒再回休息姿态 */
+  }
+  if(sharedCvs.width!==W)sharedCvs.width=W;
+  if(sharedCvs.height!==H)sharedCvs.height=H;
+  sharedCtx.save();
+  sharedCtx.clearRect(0,0,W,H);
+  /* mirror */
+  sharedCtx.translate(W,0);
+  sharedCtx.scale(-1,1);
+  sharedCtx.drawImage(res.image,0,0,W,H);
+  if(res.poseLandmarks){
+    BODY_CONN=BODY_CONN||POSE_CONNECTIONS.filter(([a,b])=>a>10&&b>10);   /* 0–10 是脸部点，由 68 点人脸网格取代 */
+    drawConnectors(sharedCtx,res.poseLandmarks,BODY_CONN,{color:'rgba(255,255,255,.78)',lineWidth:1.8});
+    drawLandmarks(sharedCtx,res.poseLandmarks.slice(11),{color:'rgba(255,255,255,.9)',fillColor:'rgba(255,255,255,.85)',lineWidth:1,radius:2.6});
+    calcLMA(res.poseLandmarks);
+  }
+  if(lastFaceResult)drawFaceMesh(sharedCtx);
+  sharedCtx.restore();
+  broadcastFrame();
+}
+
+function stats(arr){
+  const mean=arr.reduce((a,b)=>a+b,0)/Math.max(arr.length,1);
+  const variance=arr.reduce((a,b)=>a+(b-mean)**2,0)/Math.max(arr.length,1);
+  return {mean,std:Math.max(Math.sqrt(variance),MIN_STD)};
+}
+function sigmoidScore(z){return 100/(1+Math.exp(-z));}
+function quant255(v){return clamp(Math.round(v*2.55),0,255);}
+function ema(key,next,ok=true){
+  if(!ok)return lmaDisplayed[key];
+  lmaDisplayed[key]=lerp(lmaDisplayed[key],clamp(next/100,0,1),POSE_EMA_ALPHA);
+  return lmaDisplayed[key];
+}
+function lmOK(L,i,min=.55){return L[i]&&((L[i].visibility??1)>=min);}
+function avgVisibility(L,idx,min=.55){
+  let total=0,n=0;
+  for(const i of idx){if(!L[i])return 0;total+=L[i].visibility??1;n++;}
+  const avg=total/Math.max(n,1);
+  return avg>=min?avg:0;
+}
+function bboxFor(L,idx){
+  const pts=idx.filter(i=>lmOK(L,i,.45)).map(i=>L[i]);
+  if(pts.length<4)return null;
+  const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);
+  const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+  return {w:maxX-minX,h:maxY-minY,area:Math.max((maxX-minX)*(maxY-minY),MIN_STD)};
+}
+function z(feature,val){const b=poseBaseline[feature];return b?(val-b.mean)/b.std:0;}
+
+function extractPoseFeatures(L){
+  /* Upper-body only: nose, shoulders, elbows, wrists. Hips/knees/ankles are
+     dropped entirely — on a desk/laptop webcam they're rarely in frame, and
+     gating metrics on them (as this used to do) meant those metrics silently
+     never calibrated at all rather than just being noisier. */
+  const bodyIdx=[0,11,12,13,14,15,16];
+  const bbox=bboxFor(L,bodyIdx);
+  const shoulderOK=avgVisibility(L,[11,12],.55);
+  const coreOK=avgVisibility(L,[0,11,12],.55);
+  const motionIdx=bodyIdx;
+  const motionOK=avgVisibility(L,motionIdx,.35);
+
+  const shoulderWidth=shoulderOK?Math.hypot(L[11].x-L[12].x,L[11].y-L[12].y):0;
+  if(bbox)poseMaxBBoxArea=Math.max(poseMaxBBoxArea,bbox.area);
+  const maxArea=Math.max(poseMaxBBoxArea,bbox?.area||MIN_STD,MIN_STD);
+  const CI=bbox?clamp(bbox.area/maxArea,0,1):null;
+
+  const armOK=avgVisibility(L,[13,14,15,16],.5);
+  let spreadRaw=null;
+  if(shoulderOK&&armOK&&shoulderWidth>.02){
+    /* Upper-body "extension index": how far elbows+wrists sit from the chest
+       center, plus how far apart the two wrists / two elbows are from each
+       other — both normalized by shoulder width. A guarded, chest-hugging
+       posture (arms crossed in close) pulls all of these small; an open,
+       expansive posture (shoulders/arms spread) pushes them large. */
+    const cx=(L[11].x+L[12].x)/2,cy=(L[11].y+L[12].y)/2;
+    const reach=[13,14,15,16].reduce((s,i)=>s+Math.hypot(L[i].x-cx,L[i].y-cy),0)/4;
+    const wristGap=Math.hypot(L[15].x-L[16].x,L[15].y-L[16].y);
+    const elbowGap=Math.hypot(L[13].x-L[14].x,L[13].y-L[14].y);
+    spreadRaw=clamp((reach*.6+(wristGap+elbowGap)/2*.4)/shoulderWidth,0,4);
+  }
+
+  let weightRaw=null;
+  if(coreOK&&shoulderWidth>.02){
+    const sy=(L[11].y+L[12].y)/2;
+    /* shoulder width stands in for the hip-based torso length we can no
+       longer see, as the scale unit for how far the head sags below it */
+    const headDrop=clamp((L[0].y-sy)/shoulderWidth,0,1.4);
+    const shoulderDrop=poseBaseline.ready&&poseBaseline.shoulderY
+      ? clamp((sy-poseBaseline.shoulderY.mean)/Math.max(poseBaseline.shoulderY.std,.01),0,3)/3
+      : clamp((sy-.32)/.28,0,1);
+    weightRaw=clamp((headDrop*.65+shoulderDrop*.35),0,1.5);
+  }
+
+  const asym=shoulderOK&&shoulderWidth>.02
+    ? Math.abs(L[11].y-L[12].y)/shoulderWidth
+    : null;
+  /* signed version for the tentacle's bend direction: positive = right
+     shoulder lower (leaning right), negative = left shoulder lower */
+  const asymSigned=shoulderOK&&shoulderWidth>.02
+    ? (L[12].y-L[11].y)/shoulderWidth
+    : null;
+
+  let velocity=0,flow=null,jerk=0,n=0;
+  if(prevLM&&motionOK){
+    for(const i of motionIdx){
+      if(L[i]&&prevLM[i]&&((L[i].visibility??1)>.35)){
+        const dx=L[i].x-prevLM[i].x,dy=L[i].y-prevLM[i].y;
+        velocity+=Math.hypot(dx,dy);n++;
+      }
+    }
+    if(n>0){
+      velocity/=n;
+      jerk=Math.abs(velocity-prevVelocity);
+      flow=velocity;
+    }
+  }
+  prevVelocity=velocity;
+
+  const normalizedVelocity=clamp(velocity/.025,0,1);
+  if(weightRaw!==null)weightRaw*=1-normalizedVelocity;
+
+  return {
+    raw:{CI,spread:spreadRaw,weightRaw,asym,asymSigned,flow,jerk,shoulderY:shoulderOK?(L[11].y+L[12].y)/2:null},
+    ok:{openness:CI!==null,spread:spreadRaw!==null,weight:weightRaw!==null,asym:asym!==null,flow:flow!==null},
+  };
+}
+
+function updateBaseline(features){
+  const now=performance.now();
+  if(!poseBaseline.startedAt)poseBaseline.startedAt=now;
+  for(const key of ['CI','spread','weightRaw','asym','flow','jerk']){
+    const v=features.raw[key];
+    if(Number.isFinite(v))poseBaselineSamples[key].push(v);
+  }
+  if(!poseBaselineSamples.shoulderY)poseBaselineSamples.shoulderY=[];
+  if(Number.isFinite(features.raw.shoulderY))poseBaselineSamples.shoulderY.push(features.raw.shoulderY);
+
+  const progress=clamp((now-poseBaseline.startedAt)/BASELINE_MS,0,1);
+  setBar('openness',progress);setVal('openness',Math.round(progress*100).toString());
+  setBar('weight',progress);setVal('weight','CAL');
+  setBar('asym',progress);setVal('asym','CAL');
+  setBar('flow',progress);setVal('flow','CAL');
+
+  if(now-poseBaseline.startedAt>=BASELINE_MS){
+    for(const key of ['CI','spread','weightRaw','asym','flow','jerk','shoulderY']){
+      poseBaseline[key]=stats(poseBaselineSamples[key]||[0]);
+    }
+    lmaDisplayed.openness=.5;
+    lmaDisplayed.weight=.5;
+    lmaDisplayed.asym=.5;
+    lmaDisplayed.flow=.5;
+    lmaOutput255.O=128;
+    lmaOutput255.W=128;
+    lmaOutput255.A=128;
+    lmaOutput255.F=128;
+    poseBaseline.ready=true;
+  }
+}
+
+function calcLMA(L){
+  const features=extractPoseFeatures(L);
+  prevLM=L.map(lm=>({x:lm.x,y:lm.y,visibility:lm.visibility}));
+
+  if(features.raw.asymSigned!==null){
+    const target=clamp(features.raw.asymSigned/ASYM_SIGNED_NORM,-1,1);
+    asymSignedDisplayed=lerp(asymSignedDisplayed,target,POSE_EMA_ALPHA);
+  }
+
+  if(!poseBaseline.ready){
+    updateBaseline(features);
+    return;
+  }
+
+  /* Openness blends two signals: the coarse bbox coverage ratio (CI) and the
+     joint-distance extension index (spread — see extractPoseFeatures). Spread
+     is weighted higher since it's the more anatomically direct read on
+     "arms drawn in to guard the chest" vs. "shoulders/arms spread open." */
+  const openCIz=features.ok.openness?z('CI',features.raw.CI):0;
+  const openSpreadZ=features.ok.spread?z('spread',features.raw.spread):0;
+  const openZ=features.ok.openness&&features.ok.spread
+    ? openCIz*.35+openSpreadZ*.65
+    : (features.ok.spread?openSpreadZ:openCIz);
+  const weightZ=features.ok.weight?z('weightRaw',features.raw.weightRaw):0;
+  const asymZ=features.ok.asym?z('asym',features.raw.asym):0;
+  const flowZ=features.ok.flow?z('flow',features.raw.flow):0;
+  const jerkZ=features.ok.flow?Math.max(0,z('jerk',features.raw.jerk)):0;
+
+  const sO=ema('openness',sigmoidScore(openZ),features.ok.openness||features.ok.spread);
+  const sW=ema('weight',sigmoidScore(weightZ),features.ok.weight);
+  const sA=ema('asym',sigmoidScore(asymZ),features.ok.asym);
+  const sF=ema('flow',sigmoidScore(flowZ-jerkZ*.5),features.ok.flow);
+
+  lmaOutput255.O=quant255(sO*100);
+  lmaOutput255.W=quant255(sW*100);
+  lmaOutput255.A=quant255(sA*100);
+  lmaOutput255.F=quant255(sF*100);
+
+  setBar('openness',sO);setVal('openness',pct(sO));
+  setBar('weight',sW);setVal('weight',pct(sW));
+  setBar('asym',sA);setVal('asym',pct(sA));
+  setBar('flow',sF);setVal('flow',pct(sF));
+  updateBodyState(sO,sW,sA,sF);
+}
+
+const BODY_STATES={
+  open:      {en:'OPEN',      cn:'开放',col:'var(--b-open)'},
+  expansive: {en:'EXPANSIVE', cn:'舒展',col:'var(--b-expansive)'},
+  active:    {en:'ACTIVE',    cn:'激活',col:'var(--b-active)'},
+  unbalanced:{en:'UNBALANCED',cn:'失衡',col:'var(--b-unbalanced)'},
+  guarded:   {en:'GUARDED',   cn:'警惕',col:'var(--b-guarded)'},
+  contracted:{en:'CONTRACTED',cn:'收缩',col:'var(--b-contracted)'},
+  heavy:     {en:'HEAVY',     cn:'沉重',col:'var(--b-heavy)'},
+  neutral:   {en:'NEUTRAL',   cn:'中性',col:'var(--b-neutral)'},
+};
+
+/* Each body state is a target point in the 4D (O,W,A,F) percentile space, all
+   centered on .5 = personal baseline. Classification picks the nearest profile,
+   so every state has a real (Voronoi) region it can be reached from — no single
+   state can dominate the way the old cascading if/else did. */
+const BODY_PROFILES={
+  open:      {O:.78,W:.30,A:.40,F:.62},
+  expansive: {O:.72,W:.40,A:.45,F:.85},
+  active:    {O:.55,W:.35,A:.55,F:.85},
+  unbalanced:{O:.45,W:.50,A:.85,F:.50},
+  guarded:   {O:.25,W:.55,A:.60,F:.30},
+  contracted:{O:.20,W:.45,A:.45,F:.20},
+  heavy:     {O:.30,W:.80,A:.45,F:.20},
+  neutral:   {O:.50,W:.50,A:.50,F:.50},
+};
+
+function classifyBodyState(O,W,As,F){
+  let bestKey='neutral',bestDist=Infinity;
+  for(const key in BODY_PROFILES){
+    const p=BODY_PROFILES[key];
+    const d=(O-p.O)**2+(W-p.W)**2+(As-p.A)**2+(F-p.F)**2;
+    if(d<bestDist){bestDist=d;bestKey=key;}
+  }
+  return bestKey;
+}
+
+/* Names + phrasing for whichever of the 4 dimensions deviates most from the
+   personal baseline (.5) — shown alongside the state so the label is explained,
+   not just asserted. */
+const DIM_REASON={
+  O:{name:'开放程度',hi:'上肢舒展外张，高于基线',lo:'手臂收拢贴胸，低于基线'},
+  W:{name:'沉重感',  hi:'重心下沉，高于基线',lo:'身姿轻盈，低于基线'},
+  A:{name:'不对称度',hi:'左右倾斜，高于基线',lo:'左右对称，低于基线'},
+  F:{name:'流动性',  hi:'动作流畅，高于基线',lo:'动作凝滞，低于基线'},
+};
+
+function bodyStateReason(O,W,As,F){
+  const dims={O,W,A:As,F};
+  let bestDim='O',bestDev=-1;
+  for(const k in dims){
+    const dev=Math.abs(dims[k]-.5);
+    if(dev>bestDev){bestDev=dev;bestDim=k;}
+  }
+  const r=DIM_REASON[bestDim];
+  const dir=dims[bestDim]>=.5?'hi':'lo';
+  return `主导 · ${r.name} ${dims[bestDim]>=.5?'↑':'↓'} ${Math.round(dims[bestDim]*100)}（${r[dir]}）`;
+}
+
+let pendBodySince=0,curBodySince=0;
+const BODY_CONFIRM_MS=1500;
+function updateBodyState(O,W,As,F){
+  const k=classifyBodyState(O,W,As,F),now=performance.now();
+  if(k!==pendBodyKey){pendBodyKey=k;pendBodySince=now;}
+  if(k===curBodyKey)return;
+  if(now-pendBodySince<BODY_CONFIRM_MS||(curBodyKey!==null&&now-curBodySince<STATE_MIN_HOLD_MS))return;
+  curBodyKey=k;curBodySince=now;
+  const st=BODY_STATES[curBodyKey];
+  applyEmo('body-en','body-cn',st.en,st.cn,st.col);
+  setDrBody(curBodyKey,st.en,st.cn,st.col);
+  document.getElementById('body-why').textContent=bodyStateReason(O,W,As,F);
+}
+
+/* ══════════════════════════════════════════
+   MODULE 2 — FACE (face-api.js)
+══════════════════════════════════════════ */
+let faceRunning=false,faceInFlight=false,lastFaceAt=0;
+const DETECT_INTERVAL=150;   /* 人脸检测间隔（ms） */
+/* 状态稳定性：候选状态需持续被确认，切换后至少保持一段时间 */
+const STATE_MIN_HOLD_MS=3500;   /* 一个状态出现后，至少保持多久才允许切换 */
+const FACE_CONFIRM_MS=1200;     /* 新表情需连续领先多久才算数 */
+const FACE_SMOOTH=.22;          /* 表情概率平滑系数（越小越稳） */
+let faceExprSmooth=null,faceCurKey=null,faceCandKey=null,faceCandSince=0,faceCurSince=0;
+const FACE_MODEL_URL='https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+
+const FACE_EMO={
+  neutral:  {en:'NEUTRAL',   cn:'平静',col:'var(--b-neutral)'},
+  happy:    {en:'HAPPY',     cn:'开心',col:'var(--e-happy)'},
+  sad:      {en:'SAD',       cn:'悲伤',col:'var(--e-sad)'},
+  angry:    {en:'ANGRY',     cn:'愤怒',col:'var(--e-angry)'},
+  fearful:  {en:'FEARFUL',   cn:'恐惧',col:'var(--e-fearful)'},
+  disgusted:{en:'DISGUSTED', cn:'厌恶',col:'#8c8a5c'},
+  surprised:{en:'SURPRISED', cn:'惊讶',col:'var(--e-surprised)'},
+};
+const FACE_BARS=['neutral','happy','sad','angry','surprised'];
+const FACE_KEYS=['happy','surprised','neutral','fearful','angry','sad','disgusted'];
+const FACE_VALENCE_WEIGHT={
+  happy:.9, surprised:.3, neutral:0, fearful:-.65, angry:-.7, sad:-.8, disgusted:-.85,
+};
+const FACE_AROUSAL_WEIGHT={
+  happy:.55, surprised:.9, neutral:-.3, fearful:.75, angry:.7, sad:-.5, disgusted:.2,
+};
+let lastFaceSeenAt=0;
+let faceContinuous={valence:0,arousal:0,ambiguity:1};
+
+function updateFaceBars(expressions){
+  for(const key of FACE_BARS){const v=expressions[key]||0;setBar('f-'+key,v);setVal('f-'+key,pct(v));}
+}
+
+function calcFlowerSignal(expressions){
+  let valence=0,arousal=0;
+  const ranked=FACE_KEYS
+    .map(key=>[key,expressions[key]||0])
+    .sort((a,b)=>b[1]-a[1]);
+
+  for(const key of FACE_KEYS){
+    const p=expressions[key]||0;
+    valence+=p*(FACE_VALENCE_WEIGHT[key]||0);
+    arousal+=p*(FACE_AROUSAL_WEIGHT[key]||0);
+  }
+
+  const p1=ranked[0]?.[1]||0;
+  const p2=ranked[1]?.[1]||0;
+  const ambiguity=clamp(1-(p1-p2),0,1);
+  const angle=90+valence*90;
+
+  return {
+    angle:clamp(Math.round(angle),0,180),
+    ambiguity,
+    arousal,
+  };
+}
+
+function markFaceActive(){
+  lastFaceSeenAt=performance.now();
+}
+
+function faceLoop(){
+  if(!faceRunning)return;
+  const now=performance.now();
+  if(!faceInFlight&&now-lastFaceAt>=DETECT_INTERVAL){
+    faceInFlight=true;lastFaceAt=now;
+    faceapi.detectSingleFace(videoEl,new faceapi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:.5})).withFaceLandmarks().withFaceExpressions()
+      .then(result=>{
+        if(result){
+          lastFaceResult=result;
+          const raw=result.expressions;
+          if(!faceExprSmooth)faceExprSmooth={...raw};
+          else for(const k of FACE_KEYS)faceExprSmooth[k]=lerp(faceExprSmooth[k],raw[k]||0,FACE_SMOOTH);
+          const ex=faceExprSmooth;
+          updateFaceBars(ex);
+          markFaceActive();
+          const signal=calcFlowerSignal(ex);
+          faceContinuous={valence:clamp((signal.angle-90)/90,-1,1),arousal:clamp((signal.arousal+1)/2,0,1),ambiguity:signal.ambiguity};
+          const top=Object.entries(ex).sort((a,b)=>b[1]-a[1])[0];
+          const t=performance.now();
+          if(top[0]!==faceCandKey){faceCandKey=top[0];faceCandSince=t;}
+          if(top[0]!==faceCurKey){
+            const first=faceCurKey===null&&top[1]>.38;
+            const steady=t-faceCandSince>=FACE_CONFIRM_MS&&t-faceCurSince>=STATE_MIN_HOLD_MS&&top[1]>(ex[faceCurKey]||0)+.08;
+            if(first||(faceCurKey!==null&&steady)){
+              faceCurKey=top[0];faceCurSince=t;
+              const info=FACE_EMO[faceCurKey]||FACE_EMO.neutral;
+              applyEmo('face-en','face-cn',info.en,info.cn,info.col);
+              setDrFace(faceCurKey,info.en,info.cn,info.col);
+            }
+          }
+        }else{lastFaceResult=null;}
+      })
+      .catch(e=>console.error('Face:',e))
+      .finally(()=>{faceInFlight=false;});
+  }
+  requestAnimationFrame(faceLoop);
+}
+
+async function startAll(){
+  const btn=document.getElementById('btn-start');
+  btn.disabled=true;btn.textContent='LOADING…';
+  try{
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_URL),
+      faceapi.nets.faceExpressionNet.loadFromUri(FACE_MODEL_URL),
+    ]);
+    const stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720}},audio:false});
+    videoEl.srcObject=stream;
+    await new Promise(r=>{videoEl.onloadedmetadata=r;});
+    await videoEl.play();
+    await new Promise(r=>{videoEl.onplaying=r;setTimeout(r,500);});
+    document.getElementById('cam-overlay').classList.add('gone');
+    document.getElementById('dot-face').classList.add('on');
+    faceRunning=true;
+    faceLoop();
+    setupPose().catch(e=>console.error('Pose:',e));
+  }catch(e){
+    console.error(e);btn.textContent='Retry';btn.disabled=false;
+  }
+}
+
+/* ══════════════════════════════════════════
+   MODULE 3 — VOICE (Web Audio + ML)
+══════════════════════════════════════════ */
+const waveCanvas=document.getElementById('wave-canvas');
+const waveCtx=waveCanvas.getContext('2d');
+let audioCtx,analyser,yinDetector=null;
+let rawAudio=new Float32Array(0);
+let voiceSmooth={intensity:0,pitch:0,rhythm:0};
+let voicePad={valence:0,arousal:0,dominance:0};
+let voiceProbabilities={angry:0,happy:0,neutral:1,sad:0};
+let mlPipeline=null,mlBusy=false,mlLoopStarted=false,prosodyLoopStarted=false;
+let curVoiceKey=null,voiceTimer=null;
+
+async function startMic(){
+  const btn=document.getElementById('btn-mic');btn.disabled=true;
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    const src=audioCtx.createMediaStreamSource(stream);
+    analyser=audioCtx.createAnalyser();
+    analyser.fftSize=4096;analyser.smoothingTimeConstant=.25;
+    src.connect(analyser);
+    if(typeof pitchfinder!=='undefined'&&pitchfinder.YIN){try{yinDetector=pitchfinder.YIN({sampleRate:audioCtx.sampleRate});}catch(_){}}
+    const collector=audioCtx.createScriptProcessor(4096,1,1);
+    const silencer=audioCtx.createGain();silencer.gain.value=0;
+    src.connect(collector);collector.connect(silencer);silencer.connect(audioCtx.destination);
+    collector.onaudioprocess=collectAudio;
+    document.getElementById('dot-audio').classList.add('on');
+    if(audioCtx.state==='suspended')audioCtx.resume().catch(()=>{}); /* 无用户手势时会一直挂起，不能 await，否则后续分析不启动 */
+    resizeWave();runAnalysis();runProsodyVoiceLoop();startEmotionMusic();startML();
+  }catch(e){console.error('Mic:',e);btn.disabled=false;}
+}
+
+function runAnalysis(){
+  const N=analyser.fftSize,fBuf=new Float32Array(N),bBuf=new Uint8Array(analyser.frequencyBinCount);
+  let tick=0;
+  (function loop(){
+    requestAnimationFrame(loop);
+    analyser.getByteTimeDomainData(bBuf);drawWave(bBuf);
+    if(++tick%3!==0)return;
+    analyser.getFloatTimeDomainData(fBuf);
+    let sum=0;for(let i=0;i<N;i++)sum+=fBuf[i]*fBuf[i];
+    const rms=Math.sqrt(sum/N),intn=clamp(rms/.38,0,1);
+    let hz=-1;if(rms>0.007)hz=yinDetector?(yinDetector(fBuf)||-1):yinFallback(fBuf,audioCtx.sampleRate);
+    let pitchN=0;if(hz>65&&hz<420)pitchN=clamp((hz-80)/(300-80),0,1);
+    let zc=0;for(let i=1;i<N;i++)if((fBuf[i]>=0)!==(fBuf[i-1]>=0))zc++;
+    const rhythm=clamp((zc/N)/.11,0,1);
+    voiceMapper?.updateFeatures({rms,pitchHz:hz>0?hz:0,zcr:zc/N},performance.now());   /* 约 20 帧/秒 */
+    const A=.3;
+    voiceSmooth.intensity=lerp(voiceSmooth.intensity,intn,A);
+    voiceSmooth.pitch=lerp(voiceSmooth.pitch,pitchN,A);
+    voiceSmooth.rhythm=lerp(voiceSmooth.rhythm,rhythm,A);
+    updateVoicePad(curVoiceKey);
+  })();
+}
+
+function drawWave(data){
+  const W=waveCanvas.width,H=waveCanvas.height;
+  waveCtx.clearRect(0,0,W,H);
+  waveCtx.fillStyle='rgba(234,228,215,.6)';waveCtx.fillRect(0,0,W,H);
+  waveCtx.strokeStyle='rgba(125,117,97,.4)';waveCtx.lineWidth=1;
+  waveCtx.beginPath();waveCtx.moveTo(0,H/2);waveCtx.lineTo(W,H/2);waveCtx.stroke();
+  waveCtx.strokeStyle='rgba(138,152,116,.75)';waveCtx.lineWidth=1.2;
+  waveCtx.beginPath();
+  const sw=W/data.length;
+  for(let i=0;i<data.length;i++){const y=(data[i]/128)*H/2;i===0?waveCtx.moveTo(0,y):waveCtx.lineTo(i*sw,y);}
+  waveCtx.stroke();
+}
+function resizeWave(){waveCanvas.width=waveCanvas.parentElement.clientWidth;waveCanvas.height=waveCanvas.parentElement.clientHeight;}
+window.addEventListener('resize',resizeWave);resizeWave();
+
+function yinFallback(buf,sr){
+  const minT=Math.floor(sr/420),maxT=Math.ceil(sr/65);
+  const N=Math.min((buf.length/2)|0,maxT+60);if(N<minT+4)return -1;
+  const d=new Float32Array(N);d[0]=1;let run=0;
+  for(let t=1;t<N;t++){let s=0;const lim=Math.min(N,buf.length-t);for(let j=0;j<lim;j++){const x=buf[j]-buf[j+t];s+=x*x;}run+=s;d[t]=run>0?(s*t)/run:1;}
+  for(let t=minT;t<Math.min(maxT,N-2);t++){if(d[t]<0.13){while(t+1<N&&d[t+1]<d[t])t++;const a=d[t-1],b=d[t],g=d[t+1],den=2*(2*b-a-g);return sr/(den!==0?t-(g-a)/den:t);}}
+  let mv=Infinity,mi=-1;for(let t=minT;t<Math.min(maxT,N);t++)if(d[t]<mv){mv=d[t];mi=t;}
+  return(mv<0.28&&mi>0)?sr/mi:-1;
+}
+
+function collectAudio(e){
+  const chunk=new Float32Array(e.inputBuffer.getChannelData(0));
+  const maxLen=Math.floor(audioCtx.sampleRate*5);
+  const joined=new Float32Array(rawAudio.length+chunk.length);
+  joined.set(rawAudio);joined.set(chunk,rawAudio.length);
+  rawAudio=joined.length>maxLen?joined.slice(-maxLen):joined;
+}
+async function resampleTo16k(input,fromSR){
+  if(fromSR===16000)return input;
+  const outLen=Math.round(input.length*16000/fromSR);
+  const off=new OfflineAudioContext(1,outLen,16000);
+  const ab=off.createBuffer(1,input.length,fromSR);ab.copyToChannel(input,0);
+  const src=off.createBufferSource();src.buffer=ab;src.connect(off.destination);src.start(0);
+  return(await off.startRendering()).getChannelData(0);
+}
+
+const VOICE_EMO={
+  angry:{en:'ANGRY',cn:'愤怒',col:'var(--e-angry)'},
+  happy:{en:'HAPPY',cn:'开心',col:'var(--e-happy)'},
+  neutral:{en:'NEUTRAL',cn:'平静',col:'var(--e-neutral)'},
+  sad:{en:'SAD',cn:'悲伤',col:'var(--e-sad)'},
+};
+function labelToKey(label){const l=label.toLowerCase();if(l.includes('ang'))return 'angry';if(l.includes('hap'))return 'happy';if(l.includes('sad'))return 'sad';return 'neutral';}
+function padToNorm(v){return clamp((v+1)/2,0,1);}
+function padToSam(v){return clamp(Math.round(1+padToNorm(v)*8),1,9);}
+
+function estimateVoicePadFromAcoustics(){
+  const {intensity,pitch,rhythm}=voiceSmooth;
+  const arousal=clamp((intensity*.58+rhythm*.32+pitch*.1)*2-1,-1,1);
+  const valence=clamp((pitch-.45)*.9+(intensity-.22)*.35-(rhythm-.7)*.25,-1,1);
+  const dominance=clamp((intensity*.62+rhythm*.18+(1-Math.abs(pitch-.48)*2)*.2)*2-1,-1,1);
+  return {valence,arousal,dominance};
+}
+
+function updateVoicePad(labelKey=null){
+  const acoustic=estimateVoicePadFromAcoustics();
+  const labeled=labelKey?padFor(labelKey):null;
+  const target=labeled?{
+    valence:lerp(acoustic.valence,labeled.valence,.62),
+    arousal:lerp(acoustic.arousal,labeled.arousal,.62),
+    dominance:lerp(acoustic.dominance,labeled.dominance,.62),
+  }:acoustic;
+
+  voicePad.valence=lerp(voicePad.valence,target.valence,.18);
+  voicePad.arousal=lerp(voicePad.arousal,target.arousal,.18);
+  voicePad.dominance=lerp(voicePad.dominance,target.dominance,.18);
+
+  setBar('intensity',padToNorm(voicePad.valence));
+  setVal('intensity',padToSam(voicePad.valence));
+  setBar('pitch',padToNorm(voicePad.arousal));
+  setVal('pitch',padToSam(voicePad.arousal));
+  setBar('rhythm',padToNorm(voicePad.dominance));
+  setVal('rhythm',padToSam(voicePad.dominance));
+}
+
+const voiceVotes=[];let curVoiceSince=0;
+function updateVoiceEmotion(key){
+  if(!VOICE_EMO[key])key='neutral';
+  clearTimeout(voiceTimer);
+  voiceTimer=setTimeout(()=>{
+    updateVoicePad(key);
+    /* 韵律与模型两路结果交替到来：取近 5 秒多数票，避免来回跳 */
+    const now=performance.now();
+    voiceVotes.push({key,t:now});
+    while(voiceVotes.length&&now-voiceVotes[0].t>5000)voiceVotes.shift();
+    const tally={};for(const v of voiceVotes)tally[v.key]=(tally[v.key]||0)+1;
+    const leader=Object.keys(tally).sort((a,b)=>tally[b]-tally[a])[0];
+    if(leader===curVoiceKey)return;
+    if(curVoiceKey!==null&&(now-curVoiceSince<STATE_MIN_HOLD_MS||tally[leader]<(tally[curVoiceKey]||0)+2))return;
+    curVoiceKey=leader;curVoiceSince=now;
+    const info=VOICE_EMO[leader];
+    applyEmo('voice-en','voice-cn',info.en,info.cn,info.col);
+    setDrVoice(leader,info.en,info.cn,info.col);
+  },250);
+}
+
+function resultToVoiceProbabilities(result){
+  const probs={angry:0,happy:0,neutral:0,sad:0};
+  for(const item of result||[])probs[labelToKey(item.label)]+=Number(item.score)||0;
+  return probs;
+}
+
+function classifyProsodyVoice(){
+  const {intensity,pitch,rhythm}=voiceSmooth;
+  if(intensity<.035)return null;
+  if(intensity>.48&&rhythm>.42)return 'angry';
+  if(pitch>.56&&intensity>.18)return 'happy';
+  if(intensity<.18&&pitch<.28&&rhythm<.35)return 'sad';
+  return 'neutral';
+}
+
+function runProsodyVoiceLoop(){
+  if(prosodyLoopStarted)return;
+  prosodyLoopStarted=true;
+  setInterval(()=>{
+    if(!audioCtx||rawAudio.length<audioCtx.sampleRate*.6)return;
+    const key=classifyProsodyVoice();
+    if(key)updateVoiceEmotion(key);
+  },900);
+}
+
+/* 语音情绪模型：wav2vec2-base-superb-er（IEMOCAP 四类：neu / hap / ang / sad）。
+   原来的 Xenova/wav2vec2-base-superb-er 已从 Hugging Face 下架，换成同一模型的 onnx-community 转换版，
+   需要 transformers.js v3。用 4-bit 量化版（约 90MB），首次下载后浏览器会缓存。
+   加载失败（网络等）时先用响度 / 音高判断情绪（on-device tone），并每 20 秒自动重试，最多 5 次。 */
+const ML_LIB='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
+const ML_MODEL='onnx-community/wav2vec2-base-superb-er-ONNX';
+const ML_RETRY_MS=20000,ML_MAX_TRIES=5;
+let mlTries=0,mlLoading=false,mlWorker=null,mlReqId=0;
+const mlPending=new Map();
+/* 模型在后台线程（voice-emotion-worker.js）里跑：推理一次 1~2 秒，放在主线程会让画面每 3 秒卡一次。
+   就绪后 mlPipeline = 发一段 16kHz 音频给 Worker、等结果的函数 */
+function mlClassify(audio){
+  return new Promise((resolve,reject)=>{
+    const id=++mlReqId;mlPending.set(id,{resolve,reject});
+    mlWorker.postMessage({type:'classify',id,audio},[audio.buffer]);
+  });
+}
+function startML(){
+  if(mlPipeline||mlLoading)return;
+  mlLoading=true;mlTries++;
+  const loader=document.getElementById('ml-loader'),fillEl=document.getElementById('ml-fill'),pctEl=document.getElementById('ml-pct');
+  loader.classList.remove('hidden');fillEl.style.width='0%';pctEl.textContent='0%';
+  if(!curVoiceKey)document.getElementById('voice-en').textContent='loading model…';
+  const fail=err=>{
+    mlLoading=false;
+    try{mlWorker?.terminate();}catch(_){}
+    mlWorker=null;
+    pctEl.textContent='ERR';
+    loader.classList.add('hidden');
+    if(!curVoiceKey)document.getElementById('voice-en').textContent='on-device tone';
+    console.error(`ML（第 ${mlTries} 次加载失败）:`,err);
+    if(mlTries<ML_MAX_TRIES)setTimeout(startML,ML_RETRY_MS);
+  };
+  try{mlWorker=new Worker('voice-emotion-worker.js',{type:'module'});}
+  catch(err){fail(err);return;}
+  mlWorker.onerror=e=>{if(!mlPipeline)fail(e.message||e);};
+  mlWorker.onmessage=e=>{
+    const m=e.data;
+    if(m.type==='progress'){const v=Math.round(m.value);fillEl.style.width=v+'%';pctEl.textContent=v+'%';}
+    else if(m.type==='ready'){
+      mlLoading=false;mlPipeline=mlClassify;
+      loader.classList.add('hidden');
+      document.getElementById('dot-ml').classList.add('on');
+      if(!curVoiceKey)document.getElementById('voice-en').textContent='listening…';
+      runMLLoop();
+    }
+    else if(m.type==='error')fail(m.message);
+    else if(m.type==='result'){
+      const p=mlPending.get(m.id);if(!p)return;
+      mlPending.delete(m.id);
+      m.error?p.reject(new Error(m.error)):p.resolve(m.result);
+    }
+  };
+  mlWorker.postMessage({type:'load',lib:ML_LIB,model:ML_MODEL});
+}
+function runMLLoop(){
+  if(mlLoopStarted)return;
+  mlLoopStarted=true;
+  setInterval(async()=>{
+    if(mlBusy||!mlPipeline)return;
+    if(rawAudio.length<audioCtx.sampleRate*1.5)return;
+    mlBusy=true;
+    try{
+      const chunkLen=Math.min(rawAudio.length,Math.floor(audioCtx.sampleRate*4));
+      const r16k=await resampleTo16k(rawAudio.slice(-chunkLen),audioCtx.sampleRate);
+      const result=await mlPipeline(new Float32Array(r16k));   /* 复制一份交给 Worker */
+      if(result&&result.length>0){
+        voiceProbabilities=resultToVoiceProbabilities(result);
+        voiceMapper?.updateEmotion(voiceProbabilities,performance.now());
+        const key=labelToKey(result[0].label);
+        updateVoiceEmotion(key);
+      }
+    }catch(e){console.warn('Inference:',e);}
+    finally{mlBusy=false;}
+  },3000);
+}
+
+/* ══════════════════════════════════════════
+   ACTUATOR COORDINATOR
+══════════════════════════════════════════ */
+let continuousState=null;
+
+function updateDebug(state){
+  const vals={vface:state.vFace,aface:state.aFace,vvoice:state.vVoice,avoice:state.aVoice,o:state.O,w:state.W,a:state.Asym,f:state.Flow,asymsigned:state.AsymSigned,bendmag:state.tentacle.bendMagnitude,bendangle:state.tentacle.bendAngle,div:state.projector.divergence,desync:state.inflatable.desync};
+  for(const [id,v] of Object.entries(vals))document.getElementById('dbg-'+id).textContent=Number.isFinite(v)?v.toFixed(3):'ERR';
+}
+
+function updateContinuousMapping(){
+  const voice=voiceToValenceArousal(voiceProbabilities);
+  const O=lmaDisplayed.openness,W=lmaDisplayed.weight,Asym=lmaDisplayed.asym,Flow=lmaDisplayed.flow;
+  const inflatable=inflatableFlowerState(voice.valence,voice.arousal,faceContinuous.valence);
+  const projector=projectorState(faceContinuous.valence,faceContinuous.arousal,voice.valence,voice.arousal,W);
+  const tentacle=tentacleCableLengths(O,W,asymSignedDisplayed,Flow);
+  continuousState={vFace:faceContinuous.valence,aFace:faceContinuous.arousal,vVoice:voice.valence,aVoice:voice.arousal,O,W,Asym,AsymSigned:asymSignedDisplayed,Flow,inflatable,tentacle,projector};
+  distortionValue=Math.round(projector.divergence*100);
+  document.getElementById('dr-fill').style.width=distortionValue+'%';document.getElementById('dr-score').textContent=String(distortionValue).padStart(2,'0');
+  document.getElementById('dr-fill').style.background=projector.distortionActive?'var(--e-angry)':distortionValue<30?'var(--e-neutral)':'var(--accent)';
+  updateDebug(continuousState);
+}
+setInterval(updateContinuousMapping,200);updateContinuousMapping();
+
+/* ══════════════════════════════════════════
+   PLANTS — 三块 Arduino Uno（../总体代码.ino）各驱动一株植物，USB 接同一台电脑（Web Serial）
+   每 50ms 给每块板发它自己的指令，一行一条：
+     body  身体 → 触手     $TS/$TL/$TG  tentacle-mapping.js 的动作参数集（每根触手的局部目标在硬件层合成两个电机）
+     face  面部 → 机械花   $FS/$FL/$FG  flower-mapping.js 的动作参数集（新协议，见 plant-protocol.js）
+     voice 语音 → 气囊花   $PS/$PL/$PG  airbag-mapping.js 的动作参数集（含表情 / 语音不一致）
+   板子打开串口后会打印 "BOARD,T"（或 F / P），页面据此认出哪根 USB 线接的是哪株，插哪个口都行。
+   一块板带多个模块（BOARD_ALL，打印 BOARD,FPT）也能用。
+   某个信号源不在时（没人、没开麦克风）就不发该模块的指令：Arduino 超时后自己回到静息并“呼吸”。
+   点板块按钮：这株还没连上 → 选择串口（每次选一个，选三次）；已连上 → 暂停 / 恢复这一株。
+   需要 Chrome 或 Edge，并从 http://127.0.0.1 或 localhost 打开（VS Code Live Server）。
+   授权过以后，刷新页面 / 重新插上 USB 都会自动连上全部三块板。
+══════════════════════════════════════════ */
+const SERIAL_BAUD=115200,SEND_INTERVAL_MS=50,IDENTIFY_QUERY_MS=1500,IDENTIFY_GIVEUP_MS=12000;
+const boards=new Set();   /* 已打开的串口：{port,writer,reader,modules,busy,openedAt,lastQueryAt} */
+const textEncoder=new TextEncoder();
+
+/* 身体 → 触手：posture-mapping.js 算出的 LMA（O 开放、W 沉重、A 左右不对称、F 流动）交给 tentacle-mapping.js。
+   posture-mapping.js 没加载时，退回用本页自己的 LMA（要先完成 7 秒身体基线）。
+   调试面板里打开"手动"时改用滑块的值。只在参数明显变化 / 每秒心跳 / 状态切换动作时才有帧要发。 */
+function tentacleInput(){
+  if(debugPanel?.manual('tentacle')){
+    const v=debugPanel.values('tentacle');
+    return {...v,ambiguity:v.ambiguity>=0?v.ambiguity:undefined,present:true};
+  }
+  const posing=performance.now()-lastPoseResultAt<1000;
+  if(postureMapper){
+    const s=postureMapper.getState();
+    return {...s.lma,present:posing&&s.present};
+  }
+  return {O:lmaDisplayed.openness,W:lmaDisplayed.weight,A:asymSignedDisplayed,F:lmaDisplayed.flow,present:posing&&poseBaseline.ready};
+}
+setInterval(()=>{if(tentacleMapper)tentacleMapper.update(tentacleInput(),performance.now());},50);
+function bodyLine(){
+  if(!tentacleMapper)return null;
+  const lines=tentacleMapper.frames(performance.now(),tentacleSender);
+  return lines.length?lines.join('\n'):null;
+}
+
+/* 调试面板：触手一栏 */
+function setupTentacleDebug(){
+  const C=tentacleMod.config,A=C.anchors;
+  const body={calm:{O:.45,W:.25,F:.25},excited:{O:.95,W:0,F:.85},tense:{O:.1,W:.6,F:.95},low:{O:.05,W:.9,F:.05}};
+  debugPanel.addPlant({
+    key:'tentacle',title:'触手（身体）',
+    sliders:[
+      {name:'O',label:'开放度',min:0,max:1,value:.45},
+      {name:'W',label:'沉重感',min:0,max:1,value:.25},
+      {name:'A',label:'左右',min:-1,max:1,value:0},
+      {name:'F',label:'流动性',min:0,max:1,value:.25},
+      {name:'ambiguity',label:'犹豫',min:-.01,max:1,value:-.01},
+    ],
+    states:[
+      ...Object.entries(A).map(([k,a])=>({label:a.label,values:{...body[k],A:0,ambiguity:-.01}})),
+      {label:C.ambiguous.label,values:{...body.calm,A:0,ambiguity:.95}},
+      {label:'偏外侧',values:{...body.calm,A:.8,ambiguity:-.01}},
+      {label:'偏内侧',values:{...body.calm,A:-.8,ambiguity:-.01}},
+    ],
+    actions:[
+      {label:'抽动',run:()=>tentacleMapper.trigger('twitch',.8)},
+      {label:'蜷缩',run:()=>tentacleMapper.trigger('curl',.7)},
+      {label:'舒展',run:()=>tentacleMapper.trigger('unfurl',.9)},
+      {label:'摆动',run:()=>tentacleMapper.trigger('wave',.8)},
+    ],
+    readout:()=>{
+      const st=tentacleMapper.getState();if(!st)return '';
+      const f=(v,d=2)=>Number(v).toFixed(d);
+      const w=Object.entries(st.weights).map(([k,v])=>`${A[k].label}${Math.round(v*100)}%`).join(' ');
+      const curve=['匀速','缓入缓出','快起慢收','慢起急停'][st.S.curve];
+      const side=['两侧','只 A（外）','只 B（内）'][st.L.trSide];
+      return `当前：${st.dominant==='ambiguous'?'犹豫':A[st.dominant]?.label}${st.present?'':'（没人 → 平静）'}  混合：${w}\n`+
+        `（犹豫度：滑块拉到最左 = 按身体摇摆自动算；现在 ${f(st.ambiguity)}）\n`+
+        `每根触手（控制层）：${st.tentacles.map((t,i)=>`#${i+1} 卷${f(t.curl)} 偏${f(t.lean)}`).join('  ')}\n`+
+        `→ 两个电机（硬件层，取平均）：卷曲 ${f(st.S.pos)}  偏向 ${f(st.L.lean)}\n`+
+        `全程 ${f(st.S.dur,1)}s ${curve} 回程×${f(st.S.back,1)}  呼吸 ${f(st.S.per,1)}s 幅度 ${f(st.S.dep)}\n`+
+        `顶停 ${f(st.S.hold,1)}s 底停 ${f(st.S.still,1)}s  犹豫 ${f(st.S.hes)}\n`+
+        `微颤 ${f(st.S.trA,3)} @ ${f(st.S.trF,1)}Hz ${side}  两侧错开 ${f(st.L.phaseAB,1)}s  幅度 A×${f(st.L.ampA)} B×${f(st.L.ampB)}`;
+    },
+  });
+}
+
+/* 面部 → 机械花：表情的 效价 / 唤醒度 / 含糊度 交给 flower-mapping.js，得到一整套动作参数（见它开头的参数表）。
+   调试面板里打开"手动"时改用滑块的值。只在参数明显变化 / 每秒心跳 / 状态切换动作时才有帧要发。 */
+function updateFlowerMapping(){
+  if(!flowerMapper)return;
+  const now=performance.now();
+  const input=debugPanel?.manual('flower')
+    ?{...debugPanel.values('flower'),present:true}
+    :{...faceContinuous,present:faceRunning&&now-lastFaceSeenAt<500};
+  flowerMapper.update(input,now);
+}
+setInterval(updateFlowerMapping,50);
+function faceLine(){
+  if(!flowerMapper)return null;
+  const lines=flowerMapper.frames(performance.now(),flowerSender);
+  if(!lines.length)return null;
+  postFlowerLight();
+  return lines.join('\n');
+}
+
+/* 投影（投影.html）：把机械花当前的灯光参数和 Arduino 报来的呼吸节拍同步过去，投影当作一盏大号的 LED */
+const flowerLight=(()=>{try{return new BroadcastChannel('flower-light');}catch(_){return null;}})();
+function postFlowerLight(){
+  const st=flowerMapper?.getState();
+  if(!flowerLight||!st||!flowerCfg)return;
+  flowerLight.postMessage({type:'params',state:st.dominant,S:st.S,L:st.L,at:Date.now()});
+}
+function onFlowerBeat(line){   /* Arduino：FB,<周期 ms>，每次呼吸周期开始时打印 */
+  const ms=Number(line.slice(3));
+  if(flowerLight&&ms>0)flowerLight.postMessage({type:'beat',cycleMs:ms,at:Date.now()});
+}
+
+/* 调试面板：机械花一栏 */
+function setupFlowerDebug(){
+  const A=flowerCfg.anchors;
+  debugPanel.addPlant({
+    key:'flower',title:'机械花（面部）',
+    sliders:[
+      {name:'valence',label:'效价',min:-1,max:1,value:0},
+      {name:'arousal',label:'唤醒度',min:0,max:1,value:.35},
+      {name:'ambiguity',label:'含糊度',min:0,max:1,value:0},
+    ],
+    states:[
+      ...Object.values(A).map(a=>({label:a.label,values:{...a.at,ambiguity:0}})),
+      {label:flowerCfg.ambiguous.label,values:{valence:0,arousal:.35,ambiguity:.95}},
+    ],
+    actions:[
+      {label:'试探',run:()=>flowerMapper.trigger('probe',.6)},
+      {label:'大开',run:()=>flowerMapper.trigger('open',.95)},
+      {label:'大合',run:()=>flowerMapper.trigger('close',.85)},
+      {label:'惊缩',run:()=>flowerMapper.trigger('flinch',.3)},
+    ],
+    readout:()=>{
+      const st=flowerMapper.getState();if(!st)return '';
+      const f=(v,d=2)=>Number(v).toFixed(d);
+      const w=Object.entries(st.weights).map(([k,v])=>`${A[k].label}${Math.round(v*100)}%`).join(' ');
+      const curve=['匀速','缓入缓出','快起慢收','慢起急停'][st.S.curve];
+      const led=['常亮','脉动','闪烁','断续'][st.L.ledMode];
+      return `当前：${st.dominant==='ambiguous'?'犹豫':A[st.dominant]?.label}${st.present?'':'（无人 → 平静）'}  混合：${w}\n`+
+        `开合 ${f(st.S.pos)}  全程 ${f(st.S.dur,1)}s ${curve}  回程×${f(st.S.back,1)}\n`+
+        `呼吸 ${f(st.S.per,1)}s 幅度 ${f(st.S.dep)}  顶停 ${f(st.S.hold,1)}s 底停 ${f(st.S.still,1)}s\n`+
+        `微颤 ${f(st.S.trDeg,1)}° ${f(st.S.trF,1)}Hz  犹豫 ${f(st.S.hes)}\n`+
+        `LED ${Math.round(st.L.ledLevel)} ${led} ${f(st.L.ledPer,2)}s 相位 ${f(st.L.ledPhase,1)}s  试探 ${f(st.L.probeDeg,1)}° 每 ${f(st.L.probeEvery,1)}s`;
+    },
+  });
+}
+/* 语调 → 气囊花：voice-mapping.js 的声音特征和情绪，加上表情的效价（判断"不一致"），交给 airbag-mapping.js。
+   调试面板里打开"手动"时改用滑块的值。只在参数明显变化 / 每秒心跳 / 状态切换动作时才有帧要发。 */
+function airbagInput(){
+  const now=performance.now();
+  if(debugPanel?.manual('airbag')){
+    const v=debugPanel.values('airbag');
+    return {...v,present:true,facePresent:true};
+  }
+  const vs=voiceMapper&&audioCtx?voiceMapper.getState():null;
+  if(!vs)return {present:false};
+  const conf=vs.mood.confidence;
+  return {
+    valence:vs.mood.valence,arousal:vs.mood.arousal,
+    ambiguity:conf<.05?0:airbagMod.ambiguityFromConfidence(conf),   /* 模型还没出结果 = 没有信息，不当成"含糊" */
+    tremor:vs.voice.tremor,rhythm:vs.voice.rhythm,present:vs.present,
+    faceValence:faceContinuous.valence,facePresent:faceRunning&&now-lastFaceSeenAt<500,
+  };
+}
+setInterval(()=>{if(airbagMapper)airbagMapper.update(airbagInput(),performance.now());},50);
+function voiceLine(){
+  if(!airbagMapper)return null;
+  const lines=airbagMapper.frames(performance.now(),airbagSender);
+  return lines.length?lines.join('\n'):null;
+}
+
+/* 调试面板：气囊花一栏 */
+function setupAirbagDebug(){
+  const C=airbagMod.config,A=C.anchors;
+  debugPanel.addPlant({
+    key:'airbag',title:'气囊花（语调）',
+    sliders:[
+      {name:'valence',label:'语音效价',min:-1,max:1,value:0},
+      {name:'arousal',label:'唤醒度',min:0,max:1,value:.35},
+      {name:'ambiguity',label:'含糊度',min:0,max:1,value:0},
+      {name:'tremor',label:'声音颤抖',min:0,max:1,value:0},
+      {name:'rhythm',label:'说话节奏',min:0,max:1,value:.5},
+      {name:'faceValence',label:'表情效价',min:-1,max:1,value:0},
+    ],
+    states:[
+      ...Object.values(A).map(a=>({label:a.label,values:{...a.at,ambiguity:0,tremor:0,faceValence:a.at.valence}})),
+      {label:C.ambiguous.label,values:{valence:0,arousal:.35,ambiguity:.95,tremor:0,faceValence:0}},
+      {label:'强颜欢笑',values:{valence:-.6,arousal:.3,ambiguity:0,tremor:.3,faceValence:.8}},
+      {label:'声音比脸积极',values:{valence:.6,arousal:.6,ambiguity:0,tremor:0,faceValence:-.6}},
+    ],
+    actions:[
+      {label:'抽动',run:()=>airbagMapper.trigger('twitch',.6)},
+      {label:'深吸',run:()=>airbagMapper.trigger('inhale',.9)},
+      {label:'长呼',run:()=>airbagMapper.trigger('exhale',.9)},
+      {label:'屏息',run:()=>airbagMapper.trigger('hold',.6)},
+    ],
+    readout:()=>{
+      const st=airbagMapper.getState();if(!st)return '';
+      const f=(v,d=2)=>Number(v).toFixed(d);
+      const w=Object.entries(st.weights).map(([k,v])=>`${A[k].label}${Math.round(v*100)}%`).join(' ');
+      const curve=['匀速','缓入缓出','快起慢收','慢起急停'][st.S.curve];
+      const tw=['充放交替','只充（暗涌）','只抽（泄气）'][st.L.twitchMode];
+      return `当前：${st.dominant==='ambiguous'?'犹豫':A[st.dominant]?.label}${st.present?'':'（没有声音 → 平静）'}  混合：${w}\n`+
+        `充盈 ${f(st.S.pos)}  底层 ${f(st.S.dur,0)}s ${curve}  回程×${f(st.S.back,1)}\n`+
+        `呼吸 ${f(st.S.per,1)}s 幅度 ${f(st.S.dep)} 吸气占 ${Math.round(st.L.inhale*100)}%  顶停 ${f(st.S.hold,1)}s 底停 ${f(st.S.still,1)}s\n`+
+        `微颤 ${f(st.S.trA,3)} @ ${f(st.S.trF,2)}Hz  犹豫 ${f(st.S.hes)}  不规则 ${f(st.L.jitter)}\n`+
+        `不一致 ${f(st.mismatch)}  ${st.L.twitchEvery>0?`抽动 每 ${f(st.L.twitchEvery,1)}s ${tw}`:'无抽动'}`;
+    },
+  });
+}
+
+const PLANTS={
+  body:{btn:'btn-plant-body',letter:'T',line:bodyLine},
+  face:{btn:'btn-plant-face',letter:'F',line:faceLine},
+  voice:{btn:'btn-plant-voice',letter:'P',line:voiceLine},
+};
+for(const [k,p] of Object.entries(PLANTS)){p.key=k;p.paused=false;}
+
+/* 本地连接程序（bridge/plant_bridge.py，双击 启动装置.command 运行）：
+   页面由它打开时，三块板由它自动连接、断开自动重连，网页通过 WebSocket 把指令交给它，不用点 Connect。
+   连不上它（比如用 Live Server 打开）时，退回 Web Serial：每块板第一次要点 Connect 选一次串口。 */
+const bridge={ws:null,open:false,everOpen:false,boards:[],lastSent:{}};
+/* 公开测试版：不是从本机（127.0.0.1 / localhost）打开时，只做识别、不连接任何硬件，
+   植物按钮显示 Preview，按 D 的读数面板默认打开，显示三株植物"此刻会做出的反应"。 */
+const DEMO_MODE=!/^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
+function connectBridge(){
+  let ws;
+  try{ws=new WebSocket(`ws://${location.host}/plants`);}catch(_){startWebSerial();return;}
+  ws.onopen=()=>{
+    bridge.ws=ws;bridge.open=bridge.everOpen=true;console.log('本地连接程序已连接：三块板自动连接');plantsUI();
+    try{ws.send('P,r\n');}catch(_){}   /* 解除测试结束时的停泵状态（P,s），否则气囊不执行网页的指令 */
+  };
+  ws.onmessage=e=>{
+    let m;try{m=JSON.parse(e.data);}catch(_){return;}
+    if(m.type==='boards'){bridge.boards=m.boards;plantsUI();}
+    else if(m.type==='line'){
+      if(m.line.startsWith('FB,')){onFlowerBeat(m.line);return;}
+      (m.line.startsWith('ERR')?console.warn:console.log)(`[Uno ${m.modules}]`,m.line);
+    }
+  };
+  ws.onclose=()=>{
+    bridge.open=false;bridge.ws=null;bridge.boards=[];plantsUI();
+    if(bridge.everOpen)setTimeout(connectBridge,2000);   /* 连接程序重启后自动接上 */
+    else startWebSerial();                               /* 没有连接程序：用 Web Serial */
+  };
+}
+
+const boardFor=letter=>bridge.open
+  ?bridge.boards.find(b=>b.modules&&b.modules.includes(letter))
+  :[...boards].find(b=>b.modules&&b.modules.includes(letter));
+const boardName=b=>b.modules?`[Uno ${b.modules}]`:'[Uno ?]';
+
+function plantsUI(){
+  if(DEMO_MODE){
+    for(const p of Object.values(PLANTS)){
+      const btn=document.getElementById(p.btn);
+      btn.textContent='Preview';btn.classList.remove('on','busy');
+      btn.title='测试版：不连接植物。按 D 看三株植物此刻会怎么反应，按 C 手动调';
+    }
+    return;
+  }
+  const identifying=bridge.open?bridge.boards.some(b=>!b.modules):[...boards].some(b=>!b.modules);
+  for(const p of Object.values(PLANTS)){
+    const st=boardFor(p.letter)?(p.paused?'paused':'on'):(identifying?'connecting':'off');
+    const btn=document.getElementById(p.btn);
+    btn.textContent={off:'Connect',connecting:'Connecting…',on:'Linked',paused:'Paused'}[st];
+    btn.classList.toggle('on',st==='on');btn.classList.toggle('busy',st==='connecting');
+    btn.title={off:'Arduino (USB) · click to choose this plant\'s port',connecting:'Arduino is starting…',
+               on:'Arduino (USB) · click to pause this plant',paused:'Paused · click to resume'}[st];
+  }
+}
+
+async function openBoard(port){
+  for(const b of boards)if(b.port===port)return;            /* 已经打开 */
+  const b={port,writer:null,reader:null,modules:'',busy:false,openedAt:performance.now(),lastQueryAt:performance.now()};
+  boards.add(b);plantsUI();
+  try{
+    await port.open({baudRate:SERIAL_BAUD});                 /* 打开会让 Uno 复位，约 2 秒后打印 BOARD,… */
+    b.writer=port.writable.getWriter();
+    readBoardLoop(b);
+  }catch(e){console.error('Serial open:',e);boards.delete(b);}
+  plantsUI();
+}
+async function closeBoard(b){
+  if(!boards.delete(b))return;
+  try{await b.reader?.cancel();}catch(_){}
+  try{b.writer?.releaseLock();}catch(_){}
+  try{await b.port.close();}catch(_){}
+  console.log(boardName(b),'disconnected');plantsUI();
+}
+/* 读 Arduino 打印的内容（BOARD / READY / S,1 / ERR,… / T TIMEOUT …）：认板子，其余打印到控制台 */
+async function readBoardLoop(b){
+  const decoder=new TextDecoder();let buf='';
+  while(boards.has(b)&&b.port.readable){
+    const reader=b.port.readable.getReader();b.reader=reader;
+    try{
+      for(;;){
+        const {value,done}=await reader.read();if(done)break;
+        buf+=decoder.decode(value,{stream:true});
+        let i;
+        while((i=buf.indexOf('\n'))>=0){
+          const line=buf.slice(0,i).trim();buf=buf.slice(i+1);
+          if(line)onBoardLine(b,line);
+        }
+        if(buf.length>512)buf='';
+      }
+    }catch(e){console.warn('Serial read:',e);break;}
+    finally{try{reader.releaseLock();}catch(_){}}
+  }
+  closeBoard(b);
+}
+function onBoardLine(b,line){
+  if(line.startsWith('FB,')){onFlowerBeat(line);return;}
+  const m=/BOARD,([FPT]+)$/.exec(line);   /* 不锚定行首：Uno 复位时第一行前面常带一个乱码字节 */
+  if(m){
+    if(b.modules!==m[1]){
+      b.modules=m[1];
+      for(const o of boards)if(o!==b&&o.modules&&[...m[1]].some(c=>o.modules.includes(c)))
+        console.warn(boardName(b),'和',boardName(o),'是同一种板子：检查烧录前 BOARD 那一行有没有改');
+      console.log(boardName(b),'connected');plantsUI();
+    }
+    return;
+  }
+  if(line.startsWith('ERR'))console.warn(boardName(b),line);else console.log(boardName(b),line);
+}
+
+/* 点板块按钮：这株没连上 → 选择串口；已连上 → 暂停 / 恢复这一株 */
+async function connectPlant(key){
+  if(DEMO_MODE){alert('这是公开测试版：只做识别，不连接实体植物。\n按 D：看三株植物此刻会做出的反应。\n按 C：打开调试面板，手动拖滑块试各种状态。');return;}
+  const p=PLANTS[key];
+  if(boardFor(p.letter)){p.paused=!p.paused;plantsUI();return;}
+  if(bridge.open){alert('这株植物的 Arduino 还没连上。本地连接程序会自动连接：请检查 USB 线，或看连接程序窗口里的提示。');return;}
+  if(!('serial' in navigator)){alert('Web Serial needs Chrome or Edge, opened from http://127.0.0.1 or localhost.');return;}
+  let port;
+  try{port=await navigator.serial.requestPort();}catch(_){return;}   /* 用户取消 */
+  openBoard(port);
+}
+let webSerialStarted=false;
+function startWebSerial(){
+  if(webSerialStarted||!('serial' in navigator))return;
+  webSerialStarted=true;
+  navigator.serial.addEventListener('disconnect',e=>{for(const b of boards)if(b.port===e.target)closeBoard(b);});
+  navigator.serial.addEventListener('connect',e=>{if(!bridge.open)openBoard(e.target);});   /* 重新插上 USB */
+  navigator.serial.getPorts().then(ps=>ps.forEach(openBoard));
+}
+window.addEventListener('load',()=>{
+  plantsUI();
+  if(DEMO_MODE){dbgEl.hidden=false;return;}   /* 测试版：不连硬件，读数面板默认打开 */
+  connectBridge();
+});
+setInterval(plantsUI,500);
+
+/* 调试面板：按 D 切换。用来确认不同姿态 / 表情 / 语调对应的电机指令 */
+const dbgEl=document.getElementById('dbg-plants');
+addEventListener('keydown',e=>{if((e.key==='d'||e.key==='D')&&!e.repeat)dbgEl.hidden=!dbgEl.hidden;});
+setInterval(()=>{
+  if(dbgEl.hidden)return;
+  const f=v=>v.toFixed(2).padStart(5),lines=[];
+  const name=(st,cfg)=>st?(st.dominant==='ambiguous'?'犹豫':cfg.anchors[st.dominant]?.label)+(st.present?'':'（无人）'):'—';
+  if(postureMapper){
+    const s=postureMapper.getState();
+    lines.push(`身体  O 开放 ${f(s.lma.O)}  W 沉重 ${f(s.lma.W)}  A 左右 ${f(s.lma.A)}  F 流动 ${f(s.lma.F)}  ${s.present?'有人':'无人'}`);
+  }else lines.push('身体  posture-mapping.js 未加载（用本页的 LMA）');
+  const t=tentacleMapper?.getState();
+  if(t)lines.push(`触手  ${name(t,tentacleMod.config)}  卷曲 ${f(t.S.pos)}  偏向 ${f(t.L.lean)}  呼吸 ${t.S.per.toFixed(1)}s`);
+  const fl=flowerMapper?.getState();
+  if(fl)lines.push(`机械花 ${name(fl,flowerCfg)}  开合 ${f(fl.S.pos)}  呼吸 ${fl.S.per.toFixed(1)}s  LED ${['常亮','脉动','闪烁','断续'][fl.L.ledMode]}`);
+  const ab=airbagMapper?.getState();
+  if(ab)lines.push(`气囊  ${name(ab,airbagMod.config)}  充盈 ${f(ab.S.pos)}  呼吸 ${ab.S.per.toFixed(0)}s  不一致 ${f(ab.mismatch)}`);
+  lines.push('');
+  if(DEMO_MODE){
+    lines.push('测试版：不连接实体植物。上面是三株植物此刻会做出的反应（按 C 手动调，按 D 隐藏）');
+  }else if(bridge.open){
+    lines.push(`Arduino  本地连接程序（自动连接）  ${bridge.boards.length} 块板`);
+    for(const b of bridge.boards)lines.push(`${boardName(b)} ${b.port}  ${[...b.modules].map(c=>bridge.lastSent[c]).filter(Boolean).join('   ')||'（还没发送）'}`);
+  }else{
+    if(!boards.size)lines.push('Arduino  未连接（点板块上的 Connect，或双击 启动装置.command 自动连接）');
+    for(const b of boards)lines.push(`${boardName(b)}  ${b.lastSent||'（还没发送）'}`);
+  }
+  dbgEl.textContent=lines.join('\n');
+},200);
+
+/* 每 50ms：已认出的板子发各自植物的最新指令；还没认出的板子隔一会儿问一次 "?"。
+   上一组还没写完就丢帧，永远只发最新的。 */
+async function writeBoard(b,text){
+  if(b.busy||!b.writer)return;
+  b.busy=true;
+  try{await b.writer.write(textEncoder.encode(text));}
+  catch(e){console.error('Serial write:',e);closeBoard(b);}
+  b.busy=false;
+}
+setInterval(()=>{
+  if(bridge.open){                                        /* 交给本地连接程序，由它按行首字母分给各板 */
+    if(bridge.ws.bufferedAmount>0)return;
+    let out='';
+    for(const p of Object.values(PLANTS)){
+      if(p.paused||!boardFor(p.letter))continue;
+      const line=p.line();
+      if(line){out+=line+'\n';bridge.lastSent[p.letter]=line;}
+    }
+    if(out)try{bridge.ws.send(out);}catch(_){}
+    return;
+  }
+  const now=performance.now();
+  for(const b of boards){
+    if(!b.modules){
+      if(now-b.openedAt>IDENTIFY_GIVEUP_MS){console.warn('这个串口一直没有回应 BOARD，不是《语言失真》的板子？已关闭');closeBoard(b);}
+      else if(now-b.lastQueryAt>IDENTIFY_QUERY_MS){b.lastQueryAt=now;writeBoard(b,'?\n');}
+      continue;
+    }
+    let out='';
+    for(const p of Object.values(PLANTS)){
+      if(p.paused||!b.modules.includes(p.letter))continue;
+      const line=p.line();
+      if(line)out+=line+'\n';
+    }
+    if(out){b.lastSent=out.trim().split('\n').join('   ');writeBoard(b,out);}
+  }
+},SEND_INTERVAL_MS);
+
+Object.assign(window,{voiceToValenceArousal,crossChannelDivergence,inflatableFlowerState,inflatableServoAngles,bendVectorFromPosture,tentacleCableLengths,projectorState,bodyLine,faceLine,voiceLine,boards,bridge});
+Object.defineProperty(window,'flowerMapper',{get:()=>flowerMapper});   /* 控制台调试用：flowerMapper.getState() */
+
+/* ══════════════════════════════════════════
+   CLOCK
+══════════════════════════════════════════ */
+setInterval(()=>{
+  const n=new Date(),ms=String(n.getMilliseconds()).padStart(3,'0').slice(0,2);
+  document.getElementById('ts').textContent=n.toLocaleTimeString('zh',{hour12:false})+'.'+ms;
+},80);
+
+/* ══════════════════════════════════════════
+   自动启动：打开页面即请求摄像头与麦克风
+══════════════════════════════════════════ */
+window.addEventListener('load',()=>{startAll();startMic();});
+/* 浏览器要求用户手势才能出声：首次点击 / 按键时补一次 resume */
+['pointerdown','keydown'].forEach(ev=>addEventListener(ev,()=>{
+  if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});
+}));
+</script>
+</body>
+</html>
