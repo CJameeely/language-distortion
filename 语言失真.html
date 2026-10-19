@@ -721,12 +721,12 @@ function extractPoseFeatures(L){
   let weightRaw=null;
   if(coreOK&&shoulderWidth>.02){
     const sy=(L[11].y+L[12].y)/2;
-    /* shoulder width stands in for the hip-based torso length we can no
-       longer see, as the scale unit for how far the head sags below it */
-    const headDrop=clamp((L[0].y-sy)/shoulderWidth,0,1.4);
-    const shoulderDrop=poseBaseline.ready&&poseBaseline.shoulderY
-      ? clamp((sy-poseBaseline.shoulderY.mean)/Math.max(poseBaseline.shoulderY.std,.01),0,3)/3
-      : clamp((sy-.32)/.28,0,1);
+    /* 头部下垂：鼻子高出肩膀中点多少个肩宽。高出 0.7 个算完全抬头（0），只剩 0.1 个算完全低头（1），
+       和 posture-mapping.js 用同一个标准。（原来要鼻子低于肩膀才大于 0，正常低头几乎读不到） */
+    const headDrop=clamp(((sy-L[0].y)/shoulderWidth-.7)/(.1-.7),0,1);
+    /* 肩膀下沉：肩膀在画面中的高度。校准期间和之后必须用同一个公式——和个人基线的比较由后面的 z 分数统一做。
+       （原来校准后改成"比基线低多少"，平时的姿势也被算成 0，远低于基线，Weight 一直贴近 0，状态总被判成 Open） */
+    const shoulderDrop=clamp((sy-.32)/.28,0,1);
     weightRaw=clamp((headDrop*.65+shoulderDrop*.35),0,1.5);
   }
 
